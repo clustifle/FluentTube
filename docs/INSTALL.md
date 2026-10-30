@@ -11,7 +11,9 @@ For a development build, the same ZIP is available through GitHub Actions artifa
 
 ## Updating
 
-Close FluentTube, extract a new release into a separate folder, and point your shortcut at its executable. Your library and preferences stay in `%LOCALAPPDATA%\FluentTube`; replacing the application folder does not remove them. Keep a copy of this data folder before upgrading if you want a rollback backup.
+For builds from this checkout, use `scripts/Update-CurrentBuild.ps1`. The stable local application path is `artifacts/FluentTube-current/FluentTube.exe`. The script keeps only the current local application build and current release archive after a successful update; it does not remove local app data.
+
+Close FluentTube, verify the new release ZIP's checksum, and replace the contents of your existing application folder. Keep your shortcut pointed at that folder's executable. Your library and preferences stay in `%LOCALAPPDATA%\FluentTube`; replacing the application folder does not remove them. Keep a copy of this data folder before upgrading if you want a rollback backup.
 
 ## First use
 

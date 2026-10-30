@@ -49,6 +49,8 @@ The Windows build bundles the pinned **yt-dlp 2026.10.26 directory distribution*
 
 ## Build
 
+For local updates, run `./scripts/Update-CurrentBuild.ps1` after closing FluentTube. It runs checks, publishes to a staging folder, replaces `artifacts/FluentTube-current`, builds the current release ZIP/checksum, and deletes older FluentTube build folders and stale release archives. Keep shortcuts pointed at `artifacts/FluentTube-current/FluentTube.exe`. Source, test fixtures, and `%LOCALAPPDATA%\FluentTube` are preserved.
+
 Install .NET 10 SDK and Windows application development tools with a Windows SDK (22621 or later), then:
 
 ```powershell
