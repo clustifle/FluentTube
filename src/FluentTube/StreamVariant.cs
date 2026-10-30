@@ -1,7 +1,10 @@
 using System.Text.Json;
 using System.Text;
 namespace FluentTube;
-internal sealed record StreamVariant(int Height, int Width, uint Bandwidth, string Codec, Uri Video, Uri Audio);
+internal sealed record StreamVariant(int Height, int Width, uint Bandwidth, string Codec, Uri Video, Uri Audio)
+{
+    internal int QualityHeight => Math.Min(Height, Width);
+}
 internal static class StreamVariants
 {
     internal static IReadOnlyList<StreamVariant> Parse(JsonElement root)
@@ -15,13 +18,14 @@ internal static class StreamVariants
         foreach (var f in items)
         {
             if (!Text(f, "protocol").StartsWith("m3u8") || !Text(f, "vcodec").StartsWith("avc1") ||
-                !f.TryGetProperty("height", out var h) || h.ValueKind != JsonValueKind.Number || !h.TryGetInt32(out var height) || height is < 144 or > 1080 ||
+                !f.TryGetProperty("height", out var h) || h.ValueKind != JsonValueKind.Number || !h.TryGetInt32(out var height) || height <= 0 ||
                 !Uri.TryCreate(Text(f, "url"), UriKind.Absolute, out var videoUri) || videoUri.Scheme != "https") continue;
             var width = f.TryGetProperty("width", out var w) && w.ValueKind == JsonValueKind.Number && w.TryGetInt32(out var n) ? n : height * 16 / 9;
+            if (Math.Min(height, width) is < 144 or > 1080) continue;
             var bitrate = f.TryGetProperty("tbr", out var b) && b.ValueKind == JsonValueKind.Number && b.TryGetDouble(out var rate) && double.IsFinite(rate) ? rate : height * 3;
             result.Add(new(height, width, (uint)Math.Clamp((bitrate + 256) * 1000, 128000, 50000000), Text(f, "vcodec"), videoUri, audioUri));
         }
-        return result.GroupBy(v => v.Height).Select(g => g.OrderByDescending(v => v.Bandwidth).First()).OrderBy(v => v.Height).ToList();
+        return result.GroupBy(v => v.QualityHeight).Select(g => g.OrderByDescending(v => v.Bandwidth).First()).OrderBy(v => v.QualityHeight).ToList();
     }
     internal static string Manifest(IEnumerable<StreamVariant> variants)
     {

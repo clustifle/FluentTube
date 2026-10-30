@@ -48,6 +48,7 @@ public sealed partial class MainWindow
     }
     private void ResetPlayerSurface(Video video)
     {
+        ResetCaptions();
         qualityRequest?.Cancel();
         availableStream = null; qualityLookupId = null; qualitySeek = null; qualityPlay = null;
         seeking = false; seekTimer.Stop();
@@ -55,10 +56,12 @@ public sealed partial class MainWindow
         PlayerQuality.ItemsSource = new[] { new PlaybackQualityChoice(video.LocalPath is null ? "Auto" : "Original", 0) };
         PlayerQuality.SelectedIndex = 0;
         PlayerQuality.IsEnabled = false;
+        QualityMenu.Items.Clear();
+        QualityMenu.IsEnabled = false;
         syncingPlayer = false;
         VideoPoster.Source = video.LocalPath is null ? new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(video.Thumbnail)) : null;
         VideoPoster.Visibility = Visibility.Visible;
-        videoRatio = 16d / 9;
+        videoRatio = video.IsShort ? 9d / 16 : 16d / 9;
         UpdateVideoSize();
         SetControlsVisible(false);
     }
@@ -84,13 +87,22 @@ public sealed partial class MainWindow
             var stream = await YouTubeService.ResolveQualities(id, active.Token);
             if (closed || active.IsCancellationRequested || current?.Id != id || generation != playbackGeneration) return;
             availableStream = stream;
+            UpdateCaptionsMenu(stream.Captions ?? []);
             var choices = new List<PlaybackQualityChoice> { new("Auto", 0) };
             var progressive = int.TryParse(stream.Quality.TrimEnd('p'), out var height) ? height : 0;
-            choices.AddRange((stream.Variants ?? []).Select(v => v.Height).Append(progressive).Where(h => h > 0 && h <= 1080).Distinct().Order().Select(h => new PlaybackQualityChoice($"{h}p", h)));
+            choices.AddRange((stream.Variants ?? []).Select(v => v.QualityHeight).Append(progressive).Where(h => h > 0 && h <= 1080).Distinct().Order().Select(h => new PlaybackQualityChoice($"{h}p", h)));
             syncingPlayer = true;
             PlayerQuality.ItemsSource = choices;
             PlayerQuality.SelectedItem = choices.FirstOrDefault(q => q.Height == preferences.QualityHeight) ?? choices[0];
             PlayerQuality.IsEnabled = choices.Count > 1;
+            QualityMenu.Items.Clear();
+            QualityMenu.IsEnabled = choices.Count > 1;
+            foreach (var choice in choices)
+            {
+                var option = new MenuFlyoutItem { Text = choice.Label };
+                option.Click += (_, _) => PlayerQuality.SelectedItem = choice;
+                QualityMenu.Items.Add(option);
+            }
             syncingPlayer = false;
             if ((stream.Variants?.Count ?? 0) > 0) await ChangeQuality(preferences.QualityHeight, active.Token);
         }
@@ -107,7 +119,7 @@ public sealed partial class MainWindow
         if (availableStream is null || current is null) return;
         var id = current.Id;
         var generation = playbackGeneration;
-        var variants = (availableStream.Variants ?? []).Where(v => height == 0 || v.Height == height).ToList();
+        var variants = (availableStream.Variants ?? []).Where(v => height == 0 || v.QualityHeight == height).ToList();
         AdaptivePlayback? prepared = null;
         try
         {
@@ -148,12 +160,20 @@ public sealed partial class MainWindow
         var session = media.PlaybackSession;
         var playing = session.PlaybackState == MediaPlaybackState.Playing;
         var loadedCurrent = source is not null && current?.Id == loadedVideoId;
+        RefreshCaptions();
         PlayPauseButton.Content = new SymbolIcon(playing ? Symbol.Pause : Symbol.Play);
         PlayPauseButton.IsEnabled = loadedCurrent;
-        PreviousButton.Visibility = NextButton.Visibility = VideoSurface.ActualWidth < 560 ? Visibility.Collapsed : Visibility.Visible;
+        PreviousButton.Visibility = NextButton.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 560 ? Visibility.Collapsed : Visibility.Visible;
         PlayerSpeed.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 450 ? Visibility.Collapsed : Visibility.Visible;
-        PlayerQuality.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
-        SeekBackwardButton.Visibility = SeekForwardButton.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
+        PlayerQuality.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 430 ? Visibility.Collapsed : Visibility.Visible;
+        SeekBackwardButton.Visibility = SeekForwardButton.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 480 ? Visibility.Collapsed : Visibility.Visible;
+        SoundButton.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
+        PipMuteButton.Visibility = isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
+        PlaybackButtons.HorizontalAlignment = isPictureInPicture ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+        PipMuteButton.Content = new SymbolIcon(media.IsMuted || media.Volume == 0 ? Symbol.Mute : Symbol.Volume);
+        FullscreenButton.Visibility = MorePlaybackButton.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
+        PipButton.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 400 ? Visibility.Collapsed : Visibility.Visible;
+        VideoPresentationTitle.FontSize = isPictureInPicture ? 12 : 18;
         ToolTipService.SetToolTip(PipButton, isPictureInPicture ? "Return to app (I / Esc)" : "Picture in picture (I)");
         SoundButton.Content = new SymbolIcon(media.IsMuted || media.Volume == 0 ? Symbol.Mute : Symbol.Volume);
         var duration = session.NaturalDuration.TotalSeconds;
@@ -229,7 +249,11 @@ public sealed partial class MainWindow
     private void UpdateVideoSize()
     {
         // Inline height depends on width, never on the description height.
-        if (VideoSurfaceSlot.ActualWidth > 0) VideoSurfaceSlot.Height = VideoSurfaceSlot.ActualWidth / videoRatio;
+        if (VideoFrame.ActualWidth <= 0) return;
+        var portrait = videoRatio < 1;
+        var width = portrait ? Math.Min(VideoFrame.ActualWidth, Math.Max(240, PlayerPanel.ActualHeight - 100) * videoRatio) : VideoFrame.ActualWidth;
+        VideoSurfaceSlot.Width = width;
+        VideoSurfaceSlot.Height = width / videoRatio;
     }
     private void RevealPlayerControls(object sender, PointerRoutedEventArgs args) { pointerInVideo = true; ShowPlayerControls(); }
     private void LeaveVideoSurface(object sender, PointerRoutedEventArgs args)
@@ -362,6 +386,7 @@ public sealed partial class MainWindow
     }
     private void DisposeUnifiedPlayer()
     {
+        captionsRequest?.Cancel(); captionsClient.Dispose();
         playerTimer.Stop(); seekTimer.Stop(); qualityRequest?.Cancel();
         adaptivePlayback?.Dispose();
         if (keepingDisplayAwake) { try { displayRequest.RequestRelease(); } catch (Exception) { } }

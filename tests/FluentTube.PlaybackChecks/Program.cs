@@ -4,6 +4,25 @@ using Windows.Storage;
 using System.Text.Json;
 using FluentTube;
 
+if (args.Length == 2 && args[0] == "--shorts")
+{
+    var shorts = await YouTubeService.FetchShorts(args[1], CancellationToken.None);
+    var next = await YouTubeService.FetchShorts(args[1], CancellationToken.None, 2);
+    if (shorts.Count == 0 || shorts.Any(v => !v.IsShort) || next.Count == 0 || next.Any(v => shorts.Any(s => s.Id == v.Id))) throw new Exception("Shorts classification or pagination failed live.");
+    Console.WriteLine($"PASS live Shorts: {shorts.Count} items, {next.Count} distinct items on page 2");
+    var info = await YouTubeService.ResolveStream(shorts[0].Id, CancellationToken.None);
+    await Check("YouTube Short", MediaSource.CreateFromUri(info.Url));
+    var full = await YouTubeService.ResolveQualities(shorts[0].Id, CancellationToken.None);
+    var hd = full.Variants?.FirstOrDefault(v => v.QualityHeight == 1080);
+    if (hd is not null)
+    {
+        using var adaptiveShort = await AdaptivePlayback.Create([hd]);
+        await Check("1080p YouTube Short", MediaSource.CreateFromAdaptiveMediaSource(adaptiveShort.Source));
+    }
+    else Console.WriteLine("No native 1080p variant available for this Short.");
+    return;
+}
+
 if (args.Length == 2 && args[0] == "--quality")
 {
     var metadata = YouTubeService.ParseStream(await File.ReadAllTextAsync(args[1]));

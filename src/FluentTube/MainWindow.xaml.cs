@@ -47,6 +47,7 @@ public sealed partial class MainWindow : Window
         AppWindow.Changed += (_, _) => UpdateTitleBar();
         Root.ActualThemeChanged += (_, _) => UpdateTitleBar();
         Activated += (_, e) => TitleBarContent.Opacity = e.WindowActivationState == WindowActivationState.Deactivated ? 0.65 : 1;
+        PlayerPanel.SizeChanged += (_, _) => UpdateVideoSize();
         Root.SizeChanged += (_, e) =>
         {
             ContentLayout.Padding = new Thickness(e.NewSize.Width < 800 ? 16 : 24, 16, e.NewSize.Width < 800 ? 16 : 24, 16);
@@ -80,7 +81,13 @@ public sealed partial class MainWindow : Window
             LoadingPlayback.Visibility = Visibility.Collapsed;
             if (FallBackFromAdaptive()) return;
             if (current is { LocalPath: null }) YouTubeService.InvalidateStream(current.Id);
-            ShowMessage("Windows could not play this source. Choose Retry playback to get a fresh stream, or open a supported local file.", true);
+            ShowMessage(e.Error switch
+            {
+                MediaPlayerError.NetworkError => "The video connection was interrupted. Check your connection, then choose Retry video.",
+                MediaPlayerError.DecodingError => "Windows could not decode this video. Try another quality or a supported local file.",
+                MediaPlayerError.SourceNotSupported => "This stream is not supported by Windows. Retry for a fresh stream or choose another quality.",
+                _ => "Windows could not play this source. Choose Retry video or open a supported local file."
+            }, true);
         });
         media.MediaEnded += (_, _) => DispatcherQueue.TryEnqueue(async () =>
         {
@@ -90,7 +97,7 @@ public sealed partial class MainWindow : Window
                 try { history.Save(loadedVideoId, 0, media.PlaybackSession.NaturalDuration.TotalSeconds); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             }
-            if (preferences.AutoPlayNext && !preferences.Loop && PlayerPanel.Visibility == Visibility.Visible) await MoveQueue(1, autoPlay: true);
+            if (!preferences.Loop && PlayerPanel.Visibility == Visibility.Visible && (current?.IsShort == true ? preferences.ShortsAutoNext : preferences.AutoPlayNext)) await MoveQueue(1, autoPlay: true);
         });
         Root.Loaded += Initialize;
         Closed += (_, _) => { SavePosition(); closed = true; historyTimer.Stop(); preparation?.Cancel(); request?.Cancel(); media.Dispose(); source?.Dispose(); DisposeUnifiedPlayer(); };
@@ -107,10 +114,10 @@ public sealed partial class MainWindow : Window
         ShowMessage("Ready");
         var link = Environment.GetCommandLineArgs().Skip(1).FirstOrDefault();
         var id = link is null ? null : YouTubeService.ParseVideoId(link);
-        if (id is not null) await Play(new Video(id, "YouTube video", "YouTube"));
+        if (id is not null) await Play(new Video(id, "YouTube video", "YouTube", IsShort: YouTubeService.IsShortUrl(link!)));
         else if (link is not null && YouTubeService.ParseChannelUrl(link) is not null) await OpenChannel(link);
         else if (link is not null && File.Exists(link)) await PlayLocal(link);
-        else if (preferences.StartWithSaved) Navigation.SelectedItem = Navigation.MenuItems[1];
+        else if (preferences.StartWithSaved) Navigation.SelectedItem = Navigation.MenuItems.OfType<NavigationViewItem>().First(i => i.Tag as string == "saved");
         else await LoadBrowse("home");
     }
     private void ShowMessage(string message, bool error = false)
@@ -120,6 +127,13 @@ public sealed partial class MainWindow : Window
         Status.Message = message;
         Status.Severity = error ? InfoBarSeverity.Warning : InfoBarSeverity.Informational;
         Status.IsOpen = error;
+        if (error && current is not null && PlayerPanel.Visibility == Visibility.Visible)
+        {
+            var retry = new Button { Content = "Retry video" };
+            retry.Click += RetryPlayback;
+            Status.ActionButton = retry;
+        }
+        else Status.ActionButton = null;
         StatusText.Text = message;
         StatusText.Visibility = error ? Visibility.Collapsed : Visibility.Visible;
     }
@@ -141,7 +155,7 @@ public sealed partial class MainWindow : Window
         var tag = (args.SelectedItem as NavigationViewItem)?.Tag as string;
         if ((args.SelectedItem as NavigationViewItem)?.Tag is ChannelSubscription channel) { await LoadBrowse("channel", channel: channel); return; }
         if (tag == "import") { await PickVideo(); return; }
-        await LoadBrowse(tag is "saved" or "history" or "subscriptions" ? tag : "home");
+        await LoadBrowse(tag is "shorts" or "saved" or "history" or "subscriptions" ? tag : "home");
     }
     private Task LoadVideos(string? query) => LoadBrowse(string.IsNullOrWhiteSpace(query) ? "home" : "search", query);
     private async void SearchSubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
@@ -149,7 +163,7 @@ public sealed partial class MainWindow : Window
         var query = args.QueryText.Trim();
         if (query.Length == 0) return;
         var id = YouTubeService.ParseVideoId(query);
-        if (id is not null) await StartVideo(new Video(id, "YouTube video", "YouTube"));
+        if (id is not null) await StartVideo(new Video(id, "YouTube video", "YouTube", IsShort: YouTubeService.IsShortUrl(query)));
         else if (YouTubeService.ParseChannelUrl(query) is not null) await OpenChannel(query);
         else await LoadVideos(query);
     }
@@ -326,6 +340,10 @@ public sealed partial class MainWindow : Window
         var index = queue.FindIndex(v => v.Id == current?.Id);
         PreviousButton.IsEnabled = index > 0;
         NextButton.IsEnabled = index >= 0 && index < queue.Count - 1;
+        ShortNavigation.Visibility = current?.IsShort == true ? Visibility.Visible : Visibility.Collapsed;
+        PreviousShortButton.IsEnabled = index > 0;
+        NextShortButton.IsEnabled = index >= 0 && index < queue.Count - 1;
+        ShortPosition.Text = index >= 0 ? $"{index + 1} / {queue.Count}" : "Shorts";
         QueueView.ItemsSource = queue.ToList();
         QueueView.SelectedItem = index >= 0 ? queue[index] : null;
     }
@@ -354,7 +372,7 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = Root.XamlRoot, Title = "Playback shortcuts", CloseButtonText = "Close",
-            Content = new TextBlock { Text = "Space / K: Play or pause\nJ / L: Back or forward 10 seconds\nM: Mute or unmute\nF or double-click video: Fullscreen\nI: Picture in picture\nEscape: Return to app\nP / N: Previous or next video\n\nShortcuts are inactive while typing or adjusting controls.", TextWrapping = TextWrapping.Wrap }
+            Content = new TextBlock { Text = "Space / K: Play or pause\nJ / L: Back or forward 10 seconds\nM: Mute or unmute\nF or double-click video: Fullscreen\nI: Picture in picture\nEscape: Return to app\nP / N: Previous or next video\nUp / Down: Previous / next Short\n\nShortcuts are inactive while typing or adjusting controls.", TextWrapping = TextWrapping.Wrap }
         };
         await dialog.ShowAsync();
     }
@@ -382,6 +400,8 @@ public sealed partial class MainWindow : Window
             case VirtualKey.M: media.IsMuted = !media.IsMuted; break;
             case VirtualKey.F: SetFullscreen(!isFullscreen); break;
             case VirtualKey.I: SetPictureInPicture(!isPictureInPicture); break;
+            case VirtualKey.Up when current?.IsShort == true: args.Handled = true; await MoveQueue(-1); return;
+            case VirtualKey.Down when current?.IsShort == true: args.Handled = true; await MoveQueue(1); return;
             case VirtualKey.Escape: SetFullscreen(false); break;
             case VirtualKey.P: args.Handled = true; await MoveQueue(-1); return;
             case VirtualKey.N: args.Handled = true; await MoveQueue(1); return;
@@ -403,6 +423,7 @@ public sealed partial class MainWindow : Window
         StartupChoice.IsOn = preferences.StartWithSaved;
         ResumeChoice.IsOn = preferences.RememberPosition;
         NextChoice.IsOn = preferences.AutoPlayNext;
+        ShortsNextChoice.IsOn = preferences.ShortsAutoNext;
         QueueAutoplay.IsOn = preferences.AutoPlayNext;
         PrepareChoice.IsOn = preferences.PrepareOnHover;
         RepeatButton.IsChecked = preferences.Loop;
@@ -440,6 +461,7 @@ public sealed partial class MainWindow : Window
         preferences.StartWithSaved = StartupChoice.IsOn;
         preferences.RememberPosition = ResumeChoice.IsOn;
         preferences.AutoPlayNext = NextChoice.IsOn;
+        preferences.ShortsAutoNext = ShortsNextChoice.IsOn;
         QueueAutoplay.IsOn = preferences.AutoPlayNext;
         preferences.PrepareOnHover = PrepareChoice.IsOn;
         RepeatButton.IsChecked = preferences.Loop;
@@ -472,8 +494,9 @@ public sealed partial class MainWindow : Window
     {
         if (node is Border { Name: "VideoCard" } card)
         {
-            card.Width = preferences.CompactCards ? 230 : 290;
-            if (card.Child is StackPanel stack && stack.Children[0] is Grid thumbnail) thumbnail.Height = card.Width * 9 / 16;
+            var isShort = card.DataContext is Video { IsShort: true };
+            card.Width = isShort ? (preferences.CompactCards ? 170 : 210) : preferences.CompactCards ? 230 : 290;
+            if (card.Child is StackPanel stack && stack.Children[0] is Grid thumbnail) thumbnail.Height = isShort ? card.Width * 16 / 9 : card.Width * 9 / 16;
         }
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++) ResizeCards(VisualTreeHelper.GetChild(node, i));
     }

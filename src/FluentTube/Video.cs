@@ -1,8 +1,9 @@
 namespace FluentTube;
 public sealed record Video(string Id, string Title, string Channel, string? LocalPath = null,
-    string? ChannelId = null, double? Duration = null, long? Views = null, DateTimeOffset? Published = null)
+    string? ChannelId = null, double? Duration = null, long? Views = null, DateTimeOffset? Published = null,
+    bool IsShort = false, string? Preview = null)
 {
-    public string Thumbnail => LocalPath is null ? $"https://i.ytimg.com/vi/{Id}/mqdefault.jpg" : "";
+    public string Thumbnail => LocalPath is null ? Preview ?? $"https://i.ytimg.com/vi/{Id}/hqdefault.jpg" : "";
     public string DurationText => Duration is > 0 ? (Duration >= 3600 ? TimeSpan.FromSeconds(Duration.Value).ToString(@"h\:mm\:ss") : TimeSpan.FromSeconds(Duration.Value).ToString(@"m\:ss")) : "";
     public string Details => LocalPath is not null ? "Local video" : string.Join(" · ", new[]
     {

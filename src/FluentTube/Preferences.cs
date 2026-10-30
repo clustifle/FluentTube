@@ -12,6 +12,7 @@ internal sealed class Preferences
     public bool PrepareOnHover { get; set; } = true;
     public bool RememberPosition { get; set; } = true;
     public bool AutoPlayNext { get; set; }
+    public bool ShortsAutoNext { get; set; } = true;
     public int QualityHeight { get; set; }
     public double Volume { get; set; } = 0.8;
     public double Speed { get; set; } = 1;

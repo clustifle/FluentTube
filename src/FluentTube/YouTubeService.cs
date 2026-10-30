@@ -31,6 +31,13 @@ internal static partial class YouTubeService
         if (parts[0].StartsWith('@') && parts[0].Length > 1 && !parts[0].Contains('%')) return "https://www.youtube.com/" + parts[0];
         return null;
     }
+    internal static bool IsShortUrl(string input) => ParseVideoId(input) is not null && Uri.TryCreate(input, UriKind.Absolute, out var uri) && uri.AbsolutePath.StartsWith("/shorts/", StringComparison.Ordinal);
+    private static string? ParseThumbnail(JsonElement item)
+    {
+        if (!item.TryGetProperty("thumbnails", out var images) || images.ValueKind != JsonValueKind.Array) return null;
+        return images.EnumerateArray().Where(i => i.ValueKind == JsonValueKind.Object && i.TryGetProperty("url", out var u) && u.ValueKind == JsonValueKind.String)
+            .Select(i => i.GetProperty("url").GetString()).LastOrDefault(u => Uri.TryCreate(u, UriKind.Absolute, out var uri) && uri.Scheme == "https" && uri.Host == "i.ytimg.com");
+    }
     internal static string? ParseVideoId(string input)
     {
         if (VideoIdPattern().IsMatch(input)) return input;
@@ -62,7 +69,8 @@ internal static partial class YouTubeService
             long? views = item.TryGetProperty("view_count", out var c) && c.ValueKind == JsonValueKind.Number && c.TryGetInt64(out var count) ? count : null;
             DateTimeOffset? published = DateTime.TryParseExact(Text("upload_date", ""), "yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var date) ? new DateTimeOffset(date) : null;
             videos.Add(new Video(id, WebUtility.HtmlDecode(Text("title", "YouTube video")), Text("channel", Text("uploader", "YouTube")),
-                ChannelId: IsChannelId(channelId) ? channelId : null, Duration: duration, Views: views, Published: published));
+                ChannelId: IsChannelId(channelId) ? channelId : null, Duration: duration, Views: views, Published: published,
+                IsShort: IsShortUrl(Text("url", Text("webpage_url", ""))), Preview: ParseThumbnail(item)));
         }
         return videos.DistinctBy(v => v.Id).ToList();
     }
@@ -72,6 +80,17 @@ internal static partial class YouTubeService
         foreach (var arg in new[] { "--ignore-config", "--no-plugin-dirs", "--flat-playlist", "--skip-download", "--dump-single-json", "--no-warnings", "--socket-timeout", "15", "--retries", "1", "--", $"ytsearch24:{query}" }) start.ArgumentList.Add(arg);
         return start;
     }
+    internal static ProcessStartInfo ShortsProcess(string executable, string channel, int page)
+    {
+        var url = ParseChannelUrl(channel) ?? throw new InvalidOperationException("Choose a YouTube channel for Shorts.");
+        var start = SearchProcess(executable, "");
+        start.ArgumentList[^1] = url + "/shorts";
+        var offset = start.ArgumentList.Count - 2;
+        foreach (var arg in new[] { "--playlist-start", ((Math.Clamp(page, 1, 10) - 1) * 24 + 1).ToString(), "--playlist-end", (Math.Clamp(page, 1, 10) * 24).ToString() }) start.ArgumentList.Insert(offset++, arg);
+        return start;
+    }
+    internal static async Task<List<Video>> FetchShorts(string channel, CancellationToken cancellation, int page = 1) =>
+        ParseSearchResults(await Execute(ShortsProcess(HelperPath, channel, page), cancellation)).Select(v => v with { IsShort = true }).ToList();
     internal static async Task<List<Video>> Fetch(string query, CancellationToken cancellation, int page = 1)
     {
         var executable = HelperPath;
@@ -147,7 +166,7 @@ internal static partial class YouTubeService
         var result = await Task.WhenAll(tasks);
         return new(result.SelectMany(v => v).DistinctBy(v => v.Id).OrderByDescending(v => v.Published ?? DateTimeOffset.MinValue).ToList(), failures);
     }
-    internal sealed record StreamInfo(Uri Url, string Title, string Quality, string? ChannelId = null, string Channel = "YouTube", string Description = "", IReadOnlyList<StreamVariant>? Variants = null);
+    internal sealed record StreamInfo(Uri Url, string Title, string Quality, string? ChannelId = null, string Channel = "YouTube", string Description = "", IReadOnlyList<StreamVariant>? Variants = null, IReadOnlyList<CaptionTrack>? Captions = null);
     private static readonly StreamCache<StreamInfo> Streams = new(ExtractStream, StreamExpiry);
     private static readonly StreamCache<StreamInfo> QualityStreams = new((id, token) => Extract(id, token, full: true), StreamExpiry);
     internal static DateTimeOffset StreamExpiry(StreamInfo stream)
@@ -178,10 +197,11 @@ internal static partial class YouTubeService
             throw new InvalidOperationException("No compatible video stream was available.");
         var title = root.TryGetProperty("title", out var t) ? t.GetString() ?? "YouTube video" : "YouTube video";
         var quality = root.TryGetProperty("height", out var height) && height.ValueKind == JsonValueKind.Number && height.TryGetInt32(out var h) ? $"{h}p" : "Available quality";
+        if (int.TryParse(quality.TrimEnd('p'), out var videoHeight) && root.TryGetProperty("width", out var width) && width.ValueKind == JsonValueKind.Number && width.TryGetInt32(out var videoWidth) && videoWidth > 0) quality = $"{Math.Min(videoHeight, videoWidth)}p";
         var channelId = root.TryGetProperty("channel_id", out var cid) ? cid.GetString() : null;
         var channelName = root.TryGetProperty("channel", out var cn) ? cn.GetString() ?? "YouTube" : "YouTube";
         var description = root.TryGetProperty("description", out var desc) ? desc.GetString() ?? "" : "";
-        return new(uri, title, quality, IsChannelId(channelId) ? channelId : null, channelName, description, StreamVariants.Parse(root));
+        return new(uri, title, quality, IsChannelId(channelId) ? channelId : null, channelName, description, StreamVariants.Parse(root), FluentTube.Captions.Tracks(root));
     }
     private static Task<StreamInfo> ExtractStream(string id, CancellationToken cancellation) => Extract(id, cancellation, full: false);
     private static async Task<StreamInfo> Extract(string id, CancellationToken cancellation, bool full)

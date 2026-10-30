@@ -38,7 +38,7 @@ internal sealed class AdaptivePlayback : IDisposable
         memory.Seek(0);
         var result = await AdaptiveMediaSource.CreateFromStreamAsync(memory.GetInputStreamAt(0), items[0].Video, "application/vnd.apple.mpegurl");
         if (result.Status != AdaptiveMediaSourceCreationStatus.Success) { memory.Dispose(); throw new InvalidOperationException($"Windows could not open this quality ({result.Status})."); }
-        var initial = items.Where(v => v.Height <= 360).OrderByDescending(v => v.Height).FirstOrDefault() ?? items.OrderBy(v => v.Height).First();
+        var initial = items.Where(v => v.QualityHeight <= 360).OrderByDescending(v => v.QualityHeight).FirstOrDefault() ?? items.OrderBy(v => v.QualityHeight).First();
         if (result.MediaSource.AvailableBitrates.Contains(initial.Bandwidth)) result.MediaSource.InitialBitrate = initial.Bandwidth;
         return new(result.MediaSource, memory, items[0].Audio);
     }
