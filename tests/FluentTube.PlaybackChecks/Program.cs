@@ -4,6 +4,32 @@ using Windows.Storage;
 using System.Text.Json;
 using FluentTube;
 
+if (args.Length == 2 && args[0] == "--quality")
+{
+    var metadata = YouTubeService.ParseStream(await File.ReadAllTextAsync(args[1]));
+    var variant = metadata.Variants?.FirstOrDefault(v => v.Height == 1080) ?? throw new Exception("1080p variant missing.");
+    using var adaptive = await AdaptivePlayback.Create([variant]);
+    adaptive.Source.DownloadFailed += (_, e) => Console.WriteLine($"Adaptive download failed: {e.HttpResponseMessage?.StatusCode}; type {e.ResourceType}");
+    using var source1080 = MediaSource.CreateFromAdaptiveMediaSource(adaptive.Source);
+    var item = new MediaPlaybackItem(source1080);
+    using var player = new MediaPlayer { Volume = 0 };
+    var opened1080 = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+    player.MediaOpened += (_, _) => opened1080.TrySetResult(true);
+    player.MediaFailed += (_, e) => opened1080.TrySetException(new Exception($"HD playback failed: {e.Error}: {e.ErrorMessage}"));
+    player.Source = item;
+    await opened1080.Task.WaitAsync(TimeSpan.FromSeconds(45));
+    player.Play();
+    await Task.Delay(4000);
+    if (player.PlaybackSession.NaturalVideoHeight != 1080 || player.PlaybackSession.Position.TotalSeconds < 1 || item.AudioTracks.Count == 0) throw new Exception("1080p video/audio did not play.");
+    Console.WriteLine($"PASS native 1080p: {player.PlaybackSession.NaturalVideoWidth}x{player.PlaybackSession.NaturalVideoHeight}; audio tracks {item.AudioTracks.Count}; position {player.PlaybackSession.Position.TotalSeconds:F1}s");
+    if (!player.PlaybackSession.CanSeek) throw new Exception("HD stream is not seekable.");
+    player.PlaybackSession.Position = TimeSpan.FromSeconds(15);
+    await Task.Delay(3000);
+    if (player.PlaybackSession.Position.TotalSeconds < 15) throw new Exception("HD seek failed.");
+    Console.WriteLine("PASS native 1080p seeking");
+    return;
+}
+
 if (args.Length > 0 && args[0] == "--browse")
 {
     var channel = await YouTubeService.FetchChannel("@Microsoft", CancellationToken.None);

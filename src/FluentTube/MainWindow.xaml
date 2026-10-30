@@ -74,44 +74,52 @@
             </ScrollViewer>
             <Grid x:Name="PlayerPanel" Visibility="Collapsed" RowSpacing="16">
               <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-              <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+              <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
               <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <Button Click="BackToVideos" AutomationProperties.Name="Back to videos" ToolTipService.ToolTip="Back"><SymbolIcon Symbol="Back"/></Button>
                 <TextBlock x:Name="VideoTitle" Grid.Column="1" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" MaxLines="2" VerticalAlignment="Center"/>
               </Grid>
-              <Grid Grid.Row="1" Background="Black">
-                <MediaPlayerElement x:Name="Player" MinHeight="180" AreTransportControlsEnabled="True" AutoPlay="False">
-                  <MediaPlayerElement.TransportControls><MediaTransportControls IsPlaybackRateButtonVisible="True" IsPlaybackRateEnabled="True"/></MediaPlayerElement.TransportControls>
-                </MediaPlayerElement>
-                <StackPanel x:Name="LoadingPlayback" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" IsHitTestVisible="False"><ProgressRing IsActive="True" Width="32" Height="32"/><TextBlock Text="Opening video…" Foreground="White"/></StackPanel>
+              <Grid x:Name="VideoSurfaceSlot" Grid.Row="1" Background="Black">
+                <Grid x:Name="VideoSurface" Background="Black" RequestedTheme="Dark" PointerMoved="RevealPlayerControls" PointerPressed="RevealPlayerControls" DoubleTapped="VideoDoubleTapped">
+                  <MediaPlayerElement x:Name="Player" MinHeight="180" AreTransportControlsEnabled="False" AutoPlay="False" IsTabStop="True"/>
+                  <Image x:Name="VideoPoster" Stretch="Uniform" IsHitTestVisible="False"/>
+                  <ProgressBar x:Name="LoadingPlayback" IsIndeterminate="True" Visibility="Collapsed" VerticalAlignment="Top" Height="2" IsHitTestVisible="False"/>
+                  <Border x:Name="FullscreenHeading" Visibility="Collapsed" VerticalAlignment="Top" Padding="16" Background="#A0000000">
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Text, ElementName=VideoTitle}" Foreground="White" FontSize="18" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/><Button Grid.Column="1" Click="ToggleFullscreen" ToolTipService.ToolTip="Exit fullscreen (Esc)" AutomationProperties.Name="Exit fullscreen"><SymbolIcon Symbol="BackToWindow"/></Button></Grid>
+                  </Border>
+                  <Border x:Name="PlayerControls" VerticalAlignment="Bottom" Background="#E0202020" Margin="12" Padding="10" CornerRadius="6" PointerEntered="HoldPlayerControls" PointerExited="ReleasePlayerControls">
+                    <Grid RowSpacing="8">
+                      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                      <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Slider x:Name="PlayerTimeline" Minimum="0" Maximum="1" ValueChanged="TimelineChanged" AutomationProperties.Name="Video timeline"/><TextBlock x:Name="PlayerTime" Grid.Column="1" Text="0:00 / 0:00" FontSize="12" Foreground="White" VerticalAlignment="Center"/></Grid>
+                      <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                          <Button x:Name="PreviousButton" Click="PreviousVideo" IsEnabled="False" ToolTipService.ToolTip="Previous (P)" AutomationProperties.Name="Previous video" Padding="8"><SymbolIcon Symbol="Previous"/></Button>
+                          <Button Click="SeekBackward" ToolTipService.ToolTip="Back 10 seconds (J)" AutomationProperties.Name="Back 10 seconds" Padding="8"><FontIcon Glyph="&#xE7A7;"/></Button>
+                          <Button x:Name="PlayPauseButton" Click="TogglePlayPause" ToolTipService.ToolTip="Play or pause (Space)" AutomationProperties.Name="Play or pause" Padding="8"><SymbolIcon Symbol="Play"/></Button>
+                          <Button Click="SeekForward" ToolTipService.ToolTip="Forward 10 seconds (L)" AutomationProperties.Name="Forward 10 seconds" Padding="8"><FontIcon Glyph="&#xE7A6;"/></Button>
+                          <Button x:Name="NextButton" Click="NextVideo" IsEnabled="False" ToolTipService.ToolTip="Next (N)" AutomationProperties.Name="Next video" Padding="8"><SymbolIcon Symbol="Next"/></Button>
+                          <Button x:Name="SoundButton" ToolTipService.ToolTip="Volume" AutomationProperties.Name="Volume" Padding="8"><SymbolIcon Symbol="Volume"/><Button.Flyout><Flyout Opened="PlayerMenuOpened" Closed="PlayerMenuClosed"><StackPanel Spacing="12" Width="180"><TextBlock Text="Volume"/><Slider x:Name="PlayerVolume" Minimum="0" Maximum="100" Value="80" ValueChanged="PlayerVolumeChanged" AutomationProperties.Name="Video volume"/><Button Content="Mute / unmute (M)" Click="ToggleMute"/></StackPanel></Flyout></Button.Flyout></Button>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                          <ComboBox x:Name="PlayerSpeed" Width="76" SelectedIndex="2" SelectionChanged="PlayerSpeedChanged" DropDownOpened="PlayerMenuOpened" DropDownClosed="PlayerMenuClosed" AutomationProperties.Name="Playback speed"><x:String>0.5×</x:String><x:String>0.75×</x:String><x:String>1×</x:String><x:String>1.25×</x:String><x:String>1.5×</x:String><x:String>2×</x:String></ComboBox>
+                          <ComboBox x:Name="PlayerQuality" Width="94" SelectionChanged="PlayerQualityChanged" DropDownOpened="PlayerMenuOpened" DropDownClosed="PlayerMenuClosed" AutomationProperties.Name="Video quality"/>
+                          <Button x:Name="FullscreenButton" Click="ToggleFullscreen" ToolTipService.ToolTip="Fullscreen (F)" AutomationProperties.Name="Fullscreen" Padding="8"><SymbolIcon Symbol="FullScreen"/></Button>
+                          <Button ToolTipService.ToolTip="More playback options" AutomationProperties.Name="More playback options" Padding="8"><SymbolIcon Symbol="More"/><Button.Flyout><MenuFlyout Opened="PlayerMenuOpened" Closed="PlayerMenuClosed"><ToggleMenuFlyoutItem x:Name="RepeatButton" Text="Repeat" Click="ToggleRepeat"/><MenuFlyoutItem Text="Retry playback" Click="RetryPlayback"/><MenuFlyoutItem Text="Watch queue" Click="ShowQueue"/><MenuFlyoutItem Text="Keyboard shortcuts" Click="ShowShortcuts"/></MenuFlyout></Button.Flyout></Button>
+                        </StackPanel>
+                      </Grid>
+                    </Grid>
+                  </Border>
+                </Grid>
               </Grid>
               <StackPanel Grid.Row="2" Spacing="8">
-                <StackPanel Orientation="Horizontal" Spacing="12"><HyperlinkButton x:Name="WatchChannel" Content="YouTube" Click="OpenWatchChannel" Padding="0"/><Button x:Name="WatchFollowButton" Content="Follow channel" Click="FollowWatchChannel"/></StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="12"><HyperlinkButton x:Name="WatchChannel" Content="YouTube" Click="OpenWatchChannel" Padding="0"/><Button x:Name="WatchFollowButton" Content="Follow channel" Click="FollowWatchChannel"/><Button Content="Save for later" Click="SaveVideo"/><Button Content="Open on YouTube" Click="OpenInBrowser"/></StackPanel>
                 <Expander Header="Description" HorizontalAlignment="Stretch"><ScrollViewer MaxHeight="100"><TextBlock x:Name="VideoDescription" TextWrapping="Wrap" IsTextSelectionEnabled="True"/></ScrollViewer></Expander>
               </StackPanel>
-              <CommandBar Grid.Row="3" Background="Transparent" DefaultLabelPosition="Right" HorizontalAlignment="Left" IsOpen="False">
-                <AppBarButton x:Name="PreviousButton" Icon="Previous" Label="Previous" Click="PreviousVideo" IsEnabled="False"/>
-                <AppBarButton Label="Back 10 s" Click="SeekBackward"><AppBarButton.Icon><FontIcon Glyph="&#xE7A7;"/></AppBarButton.Icon></AppBarButton>
-                <AppBarButton Label="Forward 10 s" Click="SeekForward"><AppBarButton.Icon><FontIcon Glyph="&#xE7A6;"/></AppBarButton.Icon></AppBarButton>
-                <AppBarButton x:Name="NextButton" Icon="Next" Label="Next" Click="NextVideo" IsEnabled="False"/>
-                <AppBarSeparator/>
-                <AppBarButton Icon="Save" Label="Save for later" Click="SaveVideo"/>
-                <AppBarButton Icon="OpenFile" Label="Open file" Click="ImportVideo"/>
-                <AppBarButton Icon="Go" Label="Open on YouTube" Click="OpenInBrowser"/>
-                <CommandBar.SecondaryCommands>
-                  <AppBarButton Label="Retry playback" Icon="Refresh" Click="RetryPlayback"/>
-                  <AppBarToggleButton x:Name="RepeatButton" Label="Repeat" Icon="RepeatAll" Click="ToggleRepeat"/>
-                  <AppBarButton Label="Keyboard shortcuts" Click="ShowShortcuts"/>
-                  <AppBarButton Label="Show queue" Click="ShowQueue"/>
-                </CommandBar.SecondaryCommands>
-              </CommandBar>
-              <StackPanel x:Name="UpNextPanel" Grid.Column="1" Grid.RowSpan="4" Width="250" Margin="20,0,0,0" Spacing="12">
+              <StackPanel x:Name="UpNextPanel" Grid.Column="1" Grid.RowSpan="3" Width="250" Margin="20,0,0,0" Spacing="12">
                 <TextBlock Text="Up next" Style="{StaticResource SubtitleTextBlockStyle}"/>
                 <ToggleSwitch x:Name="QueueAutoplay" Header="Autoplay next" Toggled="QueueAutoplayChanged"/>
-                <ListView x:Name="QueueView" IsItemClickEnabled="True" ItemClick="VideoClicked" SelectionMode="Single" MaxHeight="420">
-                  <ListView.ItemTemplate><DataTemplate x:DataType="local:Video"><StackPanel Padding="4,8" Spacing="4"><TextBlock Text="{x:Bind Title}" TextWrapping="Wrap" MaxLines="2"/><TextBlock Text="{x:Bind Channel}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel></DataTemplate></ListView.ItemTemplate>
-                </ListView>
+                <ListView x:Name="QueueView" IsItemClickEnabled="True" ItemClick="VideoClicked" SelectionMode="Single" MaxHeight="420"><ListView.ItemTemplate><DataTemplate x:DataType="local:Video"><StackPanel Padding="4,8" Spacing="4"><TextBlock Text="{x:Bind Title}" TextWrapping="Wrap" MaxLines="2"/><TextBlock Text="{x:Bind Channel}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel></DataTemplate></ListView.ItemTemplate></ListView>
               </StackPanel>
             </Grid>
             <ScrollViewer x:Name="SettingsPanel" Visibility="Collapsed" HorizontalScrollBarVisibility="Disabled">
@@ -131,14 +139,14 @@
                     <ToggleSwitch x:Name="ResumeChoice" Header="Remember playback position" IsOn="True" Toggled="SettingsChanged"/>
                     <ToggleSwitch x:Name="NextChoice" Header="Play next video automatically" Toggled="SettingsChanged"/>
                     <ToggleSwitch x:Name="PrepareChoice" Header="Prepare videos before opening" IsOn="True" Toggled="SettingsChanged"/>
-                    <TextBlock Text="Prepare a hovered video and, when autoplay next is enabled, the next video in the list. This uses network data before playback. Stream links stay in memory for up to ten minutes." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                    <TextBlock Text="Prepare the first video in a list, hovered videos, and the next autoplay video. This uses network data before playback. Stream links stay in memory for up to ten minutes." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                     <Slider x:Name="VolumeChoice" Header="Default volume" Minimum="0" Maximum="100" Value="80" StepFrequency="5" ValueChanged="SettingsChanged" MinWidth="260"/>
                     <ComboBox x:Name="SpeedChoice" Header="Playback speed" SelectedIndex="2" SelectionChanged="SettingsChanged" MinWidth="220"><x:String>0.5×</x:String><x:String>0.75×</x:String><x:String>1×</x:String><x:String>1.25×</x:String><x:String>1.5×</x:String><x:String>2×</x:String></ComboBox>
                   </StackPanel>
                 </Expander>
                 <Expander Header="Startup" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"><ToggleSwitch x:Name="StartupChoice" Header="Open Watch later at startup" Toggled="SettingsChanged"/></Expander>
                 <Expander Header="About FluentTube" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                  <StackPanel Spacing="12"><TextBlock Text="FluentTube 0.7" FontWeight="SemiBold"/><TextBlock Text="WinUI 3 and .NET 10"/><TextBlock Text="Home, channels, local subscriptions, and history work without a Google account. Local follows do not change your YouTube subscriptions. Public video access uses yt-dlp and YouTube feeds; availability and codecs depend on YouTube and Windows." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
+                  <StackPanel Spacing="12"><TextBlock Text="FluentTube 0.8" FontWeight="SemiBold"/><TextBlock Text="WinUI 3 and .NET 10"/><TextBlock Text="Home, channels, local subscriptions, and history work without a Google account. Local follows do not change your YouTube subscriptions. Public video access uses yt-dlp and YouTube feeds; availability and codecs depend on YouTube and Windows." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
                 </Expander>
                 <Button Content="Reset preferences" Click="ResetSettings" Margin="0,8,0,0"/>
               </StackPanel>
@@ -151,5 +159,6 @@
         </StackPanel>
       </Grid>
     </NavigationView>
+    <Grid x:Name="FullscreenHost" Grid.RowSpan="2" Background="Black" Visibility="Collapsed"/>
   </Grid>
 </Window>

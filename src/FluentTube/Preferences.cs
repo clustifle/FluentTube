@@ -12,6 +12,7 @@ internal sealed class Preferences
     public bool PrepareOnHover { get; set; } = true;
     public bool RememberPosition { get; set; } = true;
     public bool AutoPlayNext { get; set; }
+    public int QualityHeight { get; set; }
     public double Volume { get; set; } = 0.8;
     public double Speed { get; set; } = 1;
     public static Preferences Load()
@@ -21,6 +22,7 @@ internal sealed class Preferences
             var value = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(Path.Combine(LibraryStore.Folder, "settings.json"))) ?? new();
             value.Volume = double.IsFinite(value.Volume) ? Math.Clamp(value.Volume, 0, 1) : 0.8;
             value.Speed = new[] { 0.5, 0.75, 1, 1.25, 1.5, 2 }.Contains(value.Speed) ? value.Speed : 1;
+            value.QualityHeight = new[] { 0, 144, 240, 360, 480, 720, 1080 }.Contains(value.QualityHeight) ? value.QualityHeight : 0;
             return value;
         }
         catch (Exception e) when (e is IOException or JsonException) { return new(); }

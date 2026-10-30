@@ -6,6 +6,8 @@
     <Compile Include="../../src/FluentTube/Video.cs" Link="Video.cs"/>
     <Compile Include="../../src/FluentTube/LocalLibrary.cs" Link="LocalLibrary.cs"/>
     <Compile Include="../../src/FluentTube/LibraryStore.cs" Link="LibraryStore.cs"/>
-    <None Include="../../src/FluentTube/Tools/*" Link="Tools/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/>
+    <Compile Include="../../src/FluentTube/StreamVariant.cs" Link="StreamVariant.cs"/>
+    <Compile Include="../../src/FluentTube/AdaptivePlayback.cs" Link="AdaptivePlayback.cs"/>
+    <None Include="../../src/FluentTube/Tools/**/*" Link="Tools/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/>
   </ItemGroup>
 </Project>

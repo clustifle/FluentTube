@@ -28,6 +28,7 @@ public sealed partial class MainWindow
         EmptyState.Text = empty;
         EmptyCard.Visibility = videos.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         EmptyState.Visibility = EmptyCard.Visibility;
+        if (preferences.PrepareOnHover && videos.FirstOrDefault(v => v.LocalPath is null) is Video first) _ = Prepare(first, 200);
     }
     private async Task LoadBrowse(string kind, string? query = null, ChannelSubscription? channel = null, bool append = false)
     {

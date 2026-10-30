@@ -1,16 +1,16 @@
 $ErrorActionPreference = 'Stop'
 $version = '2026.10.26'
-$expected = 'f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d'
+$expected = 'fd51b212cf8380c7a52ee08c0d6be7f3c59b2f2c832eaf7b45acfae6eab57419'
 $destination = Join-Path $PSScriptRoot '../src/FluentTube/Tools'
 New-Item -ItemType Directory -Force $destination | Out-Null
-$executable = Join-Path $destination 'yt-dlp.exe'
-if (!(Test-Path $executable) -or (Get-FileHash $executable -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
-    Invoke-WebRequest "https://github.com/yt-dlp/yt-dlp/releases/download/$version/yt-dlp.exe" -OutFile $executable
-}
-if ((Get-FileHash $executable -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'yt-dlp checksum mismatch' }
+$helperArchive = Join-Path $destination 'yt-dlp_win.zip'
+Invoke-WebRequest "https://github.com/yt-dlp/yt-dlp/releases/download/$version/yt-dlp_win.zip" -OutFile $helperArchive
+if ((Get-FileHash $helperArchive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'yt-dlp checksum mismatch' }
+Expand-Archive -LiteralPath $helperArchive -DestinationPath (Join-Path $destination 'yt-dlp') -Force
+Remove-Item -LiteralPath $helperArchive
 Invoke-WebRequest "https://raw.githubusercontent.com/yt-dlp/yt-dlp/$version/LICENSE" -OutFile (Join-Path $destination 'yt-dlp-LICENSE.txt')
 Invoke-WebRequest "https://raw.githubusercontent.com/yt-dlp/yt-dlp/$version/THIRD_PARTY_LICENSES.txt" -OutFile (Join-Path $destination 'yt-dlp-THIRD_PARTY_LICENSES.txt')
-Write-Output "Verified yt-dlp $version"
+Write-Output "Verified directory-build yt-dlp $version"
 $denoVersion = 'v2.9.8'
 $denoHash = 'cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf'
 $archive = Join-Path $destination 'deno.zip'

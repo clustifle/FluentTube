@@ -8,6 +8,14 @@ using System.Net.Http;
 namespace FluentTube;
 internal static partial class YouTubeService
 {
+    internal static string HelperPath
+    {
+        get
+        {
+            var directoryBuild = Path.Combine(AppContext.BaseDirectory, "Tools", "yt-dlp", "yt-dlp.exe");
+            return File.Exists(directoryBuild) ? directoryBuild : Path.Combine(AppContext.BaseDirectory, "Tools", "yt-dlp.exe");
+        }
+    }
     [GeneratedRegex("^[A-Za-z0-9_-]{11}$")]
     private static partial Regex VideoIdPattern();
     [GeneratedRegex("^UC[A-Za-z0-9_-]{22}$")]
@@ -66,7 +74,7 @@ internal static partial class YouTubeService
     }
     internal static async Task<List<Video>> Fetch(string query, CancellationToken cancellation, int page = 1)
     {
-        var executable = Path.Combine(AppContext.BaseDirectory, "Tools", "yt-dlp.exe");
+        var executable = HelperPath;
         if (!File.Exists(executable)) throw new InvalidOperationException("The search helper is missing. Extract the entire FluentTube download, including its Tools folder.");
         var start = SearchProcess(executable, query);
         var end = Math.Clamp(page, 1, 10) * 24;
@@ -91,7 +99,7 @@ internal static partial class YouTubeService
     internal static async Task<ChannelPage> FetchChannel(string input, CancellationToken cancellation, int page = 1)
     {
         var url = ParseChannelUrl(input) ?? throw new InvalidOperationException("Enter a YouTube channel URL, @handle, or channel ID.");
-        var start = SearchProcess(Path.Combine(AppContext.BaseDirectory, "Tools", "yt-dlp.exe"), "");
+        var start = SearchProcess(HelperPath, "");
         start.ArgumentList[^1] = url + "/videos";
         var offset = start.ArgumentList.Count - 2;
         foreach (var arg in new[] { "--playlist-start", ((Math.Clamp(page, 1, 10) - 1) * 24 + 1).ToString(), "--playlist-end", (Math.Clamp(page, 1, 10) * 24).ToString() }) start.ArgumentList.Insert(offset++, arg);
@@ -139,8 +147,9 @@ internal static partial class YouTubeService
         var result = await Task.WhenAll(tasks);
         return new(result.SelectMany(v => v).DistinctBy(v => v.Id).OrderByDescending(v => v.Published ?? DateTimeOffset.MinValue).ToList(), failures);
     }
-    internal sealed record StreamInfo(Uri Url, string Title, string Quality, string? ChannelId = null, string Channel = "YouTube", string Description = "");
+    internal sealed record StreamInfo(Uri Url, string Title, string Quality, string? ChannelId = null, string Channel = "YouTube", string Description = "", IReadOnlyList<StreamVariant>? Variants = null);
     private static readonly StreamCache<StreamInfo> Streams = new(ExtractStream, StreamExpiry);
+    private static readonly StreamCache<StreamInfo> QualityStreams = new((id, token) => Extract(id, token, full: true), StreamExpiry);
     internal static DateTimeOffset StreamExpiry(StreamInfo stream)
     {
         var now = DateTimeOffset.UtcNow;
@@ -154,7 +163,8 @@ internal static partial class YouTubeService
         return until;
     }
     internal static Task<StreamInfo> ResolveStream(string id, CancellationToken cancellation) => Streams.Get(id, cancellation);
-    internal static void InvalidateStream(string id) => Streams.Invalidate(id);
+    internal static Task<StreamInfo> ResolveQualities(string id, CancellationToken cancellation) => QualityStreams.Get(id, cancellation);
+    internal static void InvalidateStream(string id) { Streams.Invalidate(id); QualityStreams.Invalidate(id); }
     internal static StreamInfo ParseStream(string jsonText)
     {
         using var json = JsonDocument.Parse(jsonText);
@@ -166,19 +176,25 @@ internal static partial class YouTubeService
         var channelId = root.TryGetProperty("channel_id", out var cid) ? cid.GetString() : null;
         var channelName = root.TryGetProperty("channel", out var cn) ? cn.GetString() ?? "YouTube" : "YouTube";
         var description = root.TryGetProperty("description", out var desc) ? desc.GetString() ?? "" : "";
-        return new(uri, title, quality, IsChannelId(channelId) ? channelId : null, channelName, description);
+        return new(uri, title, quality, IsChannelId(channelId) ? channelId : null, channelName, description, StreamVariants.Parse(root));
     }
-    private static async Task<StreamInfo> ExtractStream(string id, CancellationToken cancellation)
+    private static Task<StreamInfo> ExtractStream(string id, CancellationToken cancellation) => Extract(id, cancellation, full: false);
+    private static async Task<StreamInfo> Extract(string id, CancellationToken cancellation, bool full)
     {
         if (!VideoIdPattern().IsMatch(id)) throw new InvalidOperationException("Invalid YouTube video ID.");
-        var executable = Path.Combine(AppContext.BaseDirectory, "Tools", "yt-dlp.exe");
+        var executable = HelperPath;
         var deno = Path.Combine(AppContext.BaseDirectory, "Tools", "deno.exe");
         if (!File.Exists(executable) || !File.Exists(deno)) throw new InvalidOperationException("The playback helper is missing. Extract the entire app download, including Tools.");
         var start = SearchProcess(executable, "");
         start.ArgumentList.Clear();
         foreach (var arg in new[] { "--ignore-config", "--no-plugin-dirs", "--no-playlist", "--skip-download", "--dump-single-json", "--js-runtimes", "deno:" + deno, "--socket-timeout", "15", "--retries", "1", "-f", "b[ext=mp4]/b", "--extractor-args", "youtube:skip=hls,dash,translated_subs", "--", "https://www.youtube.com/watch?v=" + id }) start.ArgumentList.Add(arg);
+        if (full)
+        {
+            var option = start.ArgumentList.IndexOf("--extractor-args");
+            start.ArgumentList.RemoveAt(option + 1); start.ArgumentList.RemoveAt(option);
+        }
         try { return ParseStream(await Execute(start, cancellation)); }
-        catch (InvalidOperationException e) when (e.Message.StartsWith("No combined audio/video", StringComparison.Ordinal))
+        catch (InvalidOperationException e) when (!full && e.Message.StartsWith("No combined audio/video", StringComparison.Ordinal))
         {
             // Some live streams require manifests. Retry with full extraction
             // rather than dropping format support to make ordinary opens faster.

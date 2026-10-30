@@ -54,6 +54,7 @@ public sealed partial class MainWindow : Window
         };
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 840));
         Player.SetMediaPlayer(media);
+        InitializeUnifiedPlayer();
         Root.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(PlayerKeyDown), true);
         historyTimer.Tick += (_, _) => SavePosition();
         historyTimer.Start();
@@ -69,19 +70,15 @@ public sealed partial class MainWindow : Window
             if (closed) return;
             media.PlaybackSession.PlaybackRate = preferences.Speed;
             LoadingPlayback.Visibility = Visibility.Collapsed;
-            if (preferences.RememberPosition && loadedVideoId is not null)
-            {
-                var position = history.Get(loadedVideoId, media.PlaybackSession.NaturalDuration.TotalSeconds);
-                if (position > 0 && media.PlaybackSession.CanSeek) media.PlaybackSession.Position = TimeSpan.FromSeconds(position);
-            }
-            ShowMessage($"Ready in {openingTime.Elapsed.TotalSeconds:F1} s • {VideoTitle.Text}");
-            if (playWhenOpened && PlayerPanel.Visibility == Visibility.Visible) media.Play();
+            OnUnifiedMediaOpened();
+            ShowMessage($"Video ready • {VideoTitle.Text}");
             if (preferences.PrepareOnHover && preferences.AutoPlayNext) _ = PrepareFollowingVideo();
         });
         media.MediaFailed += (_, e) => DispatcherQueue.TryEnqueue(() =>
         {
             if (closed) return;
             LoadingPlayback.Visibility = Visibility.Collapsed;
+            if (FallBackFromAdaptive()) return;
             if (current is { LocalPath: null }) YouTubeService.InvalidateStream(current.Id);
             ShowMessage("Windows could not play this source. Choose Retry playback to get a fresh stream, or open a supported local file.", true);
         });
@@ -96,7 +93,7 @@ public sealed partial class MainWindow : Window
             if (preferences.AutoPlayNext && !preferences.Loop && PlayerPanel.Visibility == Visibility.Visible) await MoveQueue(1, autoPlay: true);
         });
         Root.Loaded += Initialize;
-        Closed += (_, _) => { SavePosition(); closed = true; historyTimer.Stop(); preparation?.Cancel(); request?.Cancel(); media.Dispose(); source?.Dispose(); };
+        Closed += (_, _) => { SavePosition(); closed = true; historyTimer.Stop(); preparation?.Cancel(); request?.Cancel(); media.Dispose(); source?.Dispose(); DisposeUnifiedPlayer(); };
     }
     private async void Initialize(object sender, RoutedEventArgs args)
     {
@@ -128,11 +125,12 @@ public sealed partial class MainWindow : Window
     }
     private void ShowPanel(string panel)
     {
-        if (panel != "player") { playbackGeneration++; SavePosition(); media.Pause(); Player.IsFullWindow = false; }
+        if (panel != "player") { SetFullscreen(false); playbackGeneration++; SavePosition(); media.Pause(); }
         BrowsePanel.Visibility = panel == "browse" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPanel.Visibility = panel == "settings" ? Visibility.Visible : Visibility.Collapsed;
         PlayerPanel.Visibility = panel == "player" ? Visibility.Visible : Visibility.Collapsed;
         NowPlayingItem.IsEnabled = current is not null;
+        if (panel == "player") DispatcherQueue.TryEnqueue(() => { if (!closed && PlayerPanel.Visibility == Visibility.Visible) Player.Focus(FocusState.Programmatic); });
     }
     private async void Navigate(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
@@ -164,11 +162,13 @@ public sealed partial class MainWindow : Window
         queue = browseVideos.Any(v => v.Id == video.Id) ? browseVideos.ToList() : [video];
         await Play(video);
     }
-    private void SetSource(MediaSource next, string id)
+    private void SetSource(MediaSource next, string id, AdaptivePlayback? adaptive = null)
     {
         media.Pause();
         media.Source = null;
         source?.Dispose();
+        adaptivePlayback?.Dispose();
+        adaptivePlayback = adaptive;
         source = next;
         loadedVideoId = id;
         media.Source = next;
@@ -187,6 +187,8 @@ public sealed partial class MainWindow : Window
             UpdateWatchDetails();
             UpdateQueueButtons();
             LoadingPlayback.Visibility = Visibility.Collapsed;
+            ShowPlayerControls();
+            if (availableStream is null && current is { LocalPath: null }) _ = LoadVideoQualities(current.Id, playbackGeneration);
             if (preferences.AutoPlay || startPlaying) media.Play();
             ShowMessage("Playback resumed");
             return;
@@ -197,6 +199,7 @@ public sealed partial class MainWindow : Window
         var active = request = new CancellationTokenSource();
         var generation = ++playbackGeneration;
         current = video;
+        ResetPlayerSurface(video);
         currentDescription = "";
         VideoTitle.Text = video.Title;
         ShowPanel("player");
@@ -205,7 +208,7 @@ public sealed partial class MainWindow : Window
         media.Pause();
         LoadingPlayback.Visibility = Visibility.Visible;
         openingTime.Restart();
-        ShowMessage("Preparing native playback…");
+        ShowMessage("Opening video");
         try
         {
             var stream = await YouTubeService.ResolveStream(video.Id, active.Token);
@@ -232,6 +235,7 @@ public sealed partial class MainWindow : Window
             var file = await StorageFile.GetFileFromPathAsync(Path.GetFullPath(path));
             if (closed || generation != playbackGeneration) return;
             current = new Video("local:" + file.Path, file.DisplayName, "Local video", file.Path);
+            ResetPlayerSurface(current);
             currentDescription = "Local file: " + file.Name;
             lastRecordedId = null;
             VideoTitle.Text = file.DisplayName;
@@ -328,7 +332,7 @@ public sealed partial class MainWindow : Window
     private async void NextVideo(object sender, RoutedEventArgs args) => await MoveQueue(1);
     private void Seek(double seconds)
     {
-        if (source is null || !media.PlaybackSession.CanSeek) return;
+        if (source is null || current?.Id != loadedVideoId || !media.PlaybackSession.CanSeek) return;
         media.PlaybackSession.Position = TimeSpan.FromSeconds(PlaybackMath.Seek(media.PlaybackSession.Position.TotalSeconds, seconds, media.PlaybackSession.NaturalDuration.TotalSeconds));
     }
     private void SeekBackward(object sender, RoutedEventArgs args) => Seek(-10);
@@ -343,12 +347,13 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = Root.XamlRoot, Title = "Playback shortcuts", CloseButtonText = "Close",
-            Content = new TextBlock { Text = "Space / K: Play or pause\nJ / L: Back or forward 10 seconds\nM: Mute or unmute\nF: Toggle full window\nEscape: Leave full window\nP / N: Previous or next video\n\nShortcuts are inactive while typing or adjusting controls.", TextWrapping = TextWrapping.Wrap }
+            Content = new TextBlock { Text = "Space / K: Play or pause\nJ / L: Back or forward 10 seconds\nM: Mute or unmute\nF or double-click video: Fullscreen\nEscape: Leave fullscreen\nP / N: Previous or next video\n\nShortcuts are inactive while typing or adjusting controls.", TextWrapping = TextWrapping.Wrap }
         };
         await dialog.ShowAsync();
     }
     private async void PlayerKeyDown(object sender, KeyRoutedEventArgs args)
     {
+        if (isFullscreen && args.Key == VirtualKey.Escape) { SetFullscreen(false); args.Handled = true; return; }
         if (args.Handled || PlayerPanel.Visibility != Visibility.Visible) return;
         var focused = FocusManager.GetFocusedElement(Root.XamlRoot) as DependencyObject;
         for (var node = focused; node is not null; node = VisualTreeHelper.GetParent(node))
@@ -363,18 +368,19 @@ public sealed partial class MainWindow : Window
         {
             case VirtualKey.Space:
             case VirtualKey.K:
-                if (source is not null) { if (media.PlaybackSession.PlaybackState == MediaPlaybackState.Playing) media.Pause(); else media.Play(); }
+                TogglePlayPause(sender, args);
                 break;
             case VirtualKey.J: Seek(-10); break;
             case VirtualKey.L: Seek(10); break;
             case VirtualKey.M: media.IsMuted = !media.IsMuted; break;
-            case VirtualKey.F: Player.IsFullWindow = !Player.IsFullWindow; break;
-            case VirtualKey.Escape: Player.IsFullWindow = false; break;
+            case VirtualKey.F: SetFullscreen(!isFullscreen); break;
+            case VirtualKey.Escape: SetFullscreen(false); break;
             case VirtualKey.P: args.Handled = true; await MoveQueue(-1); return;
             case VirtualKey.N: args.Handled = true; await MoveQueue(1); return;
             default: return;
         }
         args.Handled = true;
+        ShowPlayerControls();
     }
     private void PopulateSettings()
     {

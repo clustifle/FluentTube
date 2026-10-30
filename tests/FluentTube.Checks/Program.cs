@@ -86,3 +86,17 @@ localLibrary.Record(new("dQw4w9WgXcQ", "Two", "Creator"));
 localLibrary.Record(new("jNQXAC9IVRw", "One", "Creator"));
 if (localLibrary.Watched.Count != 2 || localLibrary.Watched[0].Id != "jNQXAC9IVRw") throw new Exception("Watch history ordering failed.");
 Console.WriteLine("Passed channel validation, video metadata, subscription feed, and history checks.");
+using var qualityJson = System.Text.Json.JsonDocument.Parse("""
+{"formats":[
+{"protocol":"m3u8_native","vcodec":"none","ext":"mp4","url":"https://example.com/itag/234/audio.m3u8"},
+{"protocol":"m3u8_native","vcodec":"avc1.640028","height":1080,"width":1920,"tbr":3000,"url":"https://example.com/itag/270/video.m3u8"},
+{"protocol":"m3u8_native","vcodec":"avc1.640033","height":2160,"width":3840,"url":"https://example.com/4k.m3u8"},
+{"protocol":"m3u8_native","vcodec":"vp09.00.40.08","height":1080,"width":1920,"url":"https://example.com/vp9.m3u8"}
+]}
+""");
+var qualities = StreamVariants.Parse(qualityJson.RootElement);
+if (qualities.Count != 1 || qualities[0].Height != 1080) throw new Exception("Native quality selection must cap at H.264 1080p.");
+var manifest = StreamVariants.Manifest(qualities);
+if (!manifest.Contains("RESOLUTION=1920x1080") || !manifest.Contains("TYPE=AUDIO") || !manifest.Contains("mp4a.40.2")) throw new Exception("HD master manifest did not include audio and video.");
+if (PlaybackMath.Time(3661) != "1:01:01" || PlaybackMath.Time(double.NaN) != "0:00") throw new Exception("Player time display failed.");
+Console.WriteLine("Passed 1080p cap, HLS audio/video manifest, and timeline display checks.");
