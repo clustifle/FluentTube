@@ -42,6 +42,7 @@ public sealed partial class MainWindow
             try { library.Save(); }
             catch { library.Subscriptions = previous; throw; }
             RefreshSubscriptionNavigation(); UpdateFollowButtons();
+            if (browseKind == "subscriptions" && browseVideos.Count == 0) EmptyState.Text = "Subscriptions imported. Choose Refresh to load recent uploads.";
             ShowMessage($"Imported {library.Subscriptions.Count - previous.Count} channel(s). {skipped} duplicates and {result.InvalidRows} invalid rows skipped. Choose Refresh in Subscriptions to load uploads.");
         }
         catch (Exception e)

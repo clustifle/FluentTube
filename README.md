@@ -1,12 +1,16 @@
 # FluentTube
 
-A Windows 11 YouTube client built with **C#, .NET 10, and WinUI 3**. Version 0.9 adds Shorts browsing and portrait playback, captions, and simpler Picture-in-Picture controls, alongside fullscreen and native H.264/AAC quality selection up to 1080p. Home, channel browsing, local subscriptions, history, Watch later, and the queue keep the standard Fluent/Mica interface. No API key or Google account is needed. This is a public-video client with local library features, not a complete signed-in YouTube replacement.
+A Windows 11 YouTube client built with **C#, .NET 10, and WinUI 3**. **1.0 RC1** packages Home, channels, Shorts, Takeout subscriptions, captions, fullscreen, aspect-aware PiP, and native quality up to 1080p with an original Fluent icon and portable release assets. No API key or Google account is needed. This is a public-video client with local library features, not a complete signed-in YouTube replacement.
+
+RC1 is a release candidate. Clean-machine launch and interactive Windows validation are still required before stable 1.0. See the [release checklist](docs/RELEASE-CHECKLIST.md), [release notes](docs/releases/v1.0.0-rc.1.md), [installation guide](docs/INSTALL.md), [privacy information](docs/PRIVACY.md), and [icon preview](branding/IconPreview.png).
 
 ## Download
 
 Open [Windows build](https://github.com/clustifle/FluentTube/actions/workflows/windows.yml), select the latest successful run, and download `FluentTube-win-x64` from Artifacts (GitHub sign-in required). Extract the **entire ZIP**, including `Tools`, and run `FluentTube.exe`.
 
 Requires Windows 11 x64. .NET and Windows App SDK runtimes are bundled. Builds are unsigned; there is no installer yet. WebView2 and the YouTube embedded player are no longer used.
+
+The `FluentTube-release` Actions artifact contains a versioned portable ZIP and SHA-256 checksum. RC tags prepare a draft GitHub release with those assets; drafts are visible to repository maintainers and remain unpublished until the release gates are verified.
 
 ## Watch and import
 
@@ -49,6 +53,7 @@ Install .NET 10 SDK and Windows application development tools with a Windows SDK
 ./scripts/Get-SearchHelper.ps1
 dotnet run --project tests/FluentTube.Checks -c Release
 dotnet publish src/FluentTube/FluentTube.csproj -c Release -p:Platform=x64 -o artifacts/FluentTube-win-x64
+./scripts/Package-Release.ps1
 ```
 
 GitHub Actions checks URL parsing, metadata, literal process arguments, and stream validation; publishes on Windows; and verifies the executable, XAML resources, and helpers are included. No credentials are needed to build.

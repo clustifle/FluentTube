@@ -153,3 +153,16 @@ foreach (var ratio in new[] { 16d / 9, 9d / 16, 1d, 21d / 9, 9d / 21 })
 var smallPip = PlaybackMath.PipSize(1, 150, 90);
 if (smallPip.Width != 90 || smallPip.Height != 90 || PlaybackMath.PipSize(double.NaN).Height != 180) throw new Exception("PiP screen bounds or unknown-ratio fallback failed.");
 Console.WriteLine("Passed PiP portrait, square, widescreen, ultrawide, and small-display aspect checks.");
+var generations = 0;
+var replacedCache = new StreamCache<int>(async (_, token) =>
+{
+    var generation = Interlocked.Increment(ref generations);
+    if (generation == 1) await Task.Delay(Timeout.Infinite, token);
+    return generation;
+}, _ => DateTimeOffset.UtcNow.AddMinutes(1));
+var staleLookup = replacedCache.Get("expired", CancellationToken.None);
+replacedCache.Invalidate("expired");
+if (await replacedCache.Get("expired", CancellationToken.None) != 2) throw new Exception("Invalidating an in-flight lookup did not start a fresh extraction.");
+try { await staleLookup; throw new Exception("Invalidated lookup completed with stale data."); } catch (OperationCanceledException) { }
+if (!replacedCache.TryGet("expired", out var refreshed) || refreshed != 2) throw new Exception("Stale lookup replaced the refreshed cache entry.");
+Console.WriteLine("Passed in-flight invalidation and fresh-stream recovery cache checks.");

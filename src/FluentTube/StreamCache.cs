@@ -92,6 +92,10 @@ internal sealed class StreamCache<T>(Func<string, CancellationToken, Task<T>> fa
     }
     public void Invalidate(string id)
     {
-        lock (gate) values.Remove(id);
+        lock (gate)
+        {
+            values.Remove(id);
+            if (pending.Remove(id, out var work)) work.Stop.Cancel();
+        }
     }
 }

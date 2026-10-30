@@ -36,9 +36,14 @@ public sealed partial class MainWindow : Window
     private CancellationTokenSource? browseRequest;
     private string? lastRecordedId;
     private string currentDescription = "";
+    private int recoveryAttempts;
+    private bool recoveringPlayback;
+    private double? recoverySeek;
+    private bool? recoveryPlay;
     public MainWindow()
     {
         InitializeComponent();
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "FluentTube.ico"));
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -72,18 +77,24 @@ public sealed partial class MainWindow : Window
         });
         media.MediaOpened += (_, _) => DispatcherQueue.TryEnqueue(() =>
         {
-            if (closed) return;
+            if (closed || current?.Id != loadedVideoId || request is not null) return;
             media.PlaybackSession.PlaybackRate = preferences.Speed;
             LoadingPlayback.Visibility = Visibility.Collapsed;
             OnUnifiedMediaOpened();
             ShowMessage($"Video ready • {VideoTitle.Text}");
             if (preferences.PrepareOnHover && preferences.AutoPlayNext) _ = PrepareFollowingVideo();
         });
-        media.MediaFailed += (_, e) => DispatcherQueue.TryEnqueue(() =>
+        media.MediaFailed += (_, e) => DispatcherQueue.TryEnqueue(async () =>
         {
-            if (closed) return;
+            if (closed || current?.Id != loadedVideoId || request is not null) return;
             LoadingPlayback.Visibility = Visibility.Collapsed;
             if (FallBackFromAdaptive()) return;
+            if (recoveringPlayback) return;
+            if (current is { LocalPath: null } && recoveryAttempts == 0 && e.Error is not (MediaPlayerError.DecodingError or MediaPlayerError.Aborted))
+            {
+                await RecoverPlayback();
+                return;
+            }
             if (current is { LocalPath: null }) YouTubeService.InvalidateStream(current.Id);
             ShowMessage(e.Error switch
             {
@@ -95,7 +106,7 @@ public sealed partial class MainWindow : Window
         });
         media.MediaEnded += (_, _) => DispatcherQueue.TryEnqueue(async () =>
         {
-            if (closed) return;
+            if (closed || current?.Id != loadedVideoId || request is not null) return;
             if (preferences.RememberPosition && loadedVideoId is not null)
             {
                 try { history.Save(loadedVideoId, 0, media.PlaybackSession.NaturalDuration.TotalSeconds); }
@@ -192,8 +203,9 @@ public sealed partial class MainWindow : Window
         loadedVideoId = id;
         media.Source = next;
     }
-    private async Task Play(Video video, bool refresh = false, bool startPlaying = false)
+    private async Task Play(Video video, bool refresh = false, bool startPlaying = false, bool recovery = false)
     {
+        if (!recovery) { recoveryAttempts = 0; recoverySeek = null; recoveryPlay = null; }
         lastRecordedId = null;
         if (preparingId != video.Id) preparation?.Cancel();
         if (video.LocalPath is not null) { await PlayLocal(video.LocalPath, startPlaying); return; }
@@ -368,7 +380,21 @@ public sealed partial class MainWindow : Window
     private void SeekForward(object sender, RoutedEventArgs args) => Seek(10);
     private async void RetryPlayback(object sender, RoutedEventArgs args)
     {
-        if (current is not null) await Play(current, refresh: true);
+        if (current is null) return;
+        recoveryAttempts = 0;
+        await RecoverPlayback();
+    }
+    private async Task RecoverPlayback()
+    {
+        if (current is null || recoveringPlayback) return;
+        var video = current;
+        recoveryAttempts++;
+        recoveringPlayback = true;
+        recoverySeek = media.PlaybackSession.Position.TotalSeconds;
+        recoveryPlay = media.PlaybackSession.PlaybackState == MediaPlaybackState.Paused ? false : playWhenOpened;
+        ShowMessage("Refreshing the video connection…");
+        try { await Play(video, refresh: true, recovery: true); }
+        finally { recoveringPlayback = false; }
     }
     private void ToggleRepeat(object sender, RoutedEventArgs args) => LoopChoice.IsOn = RepeatButton.IsChecked == true;
     private async void ShowShortcuts(object sender, RoutedEventArgs args)

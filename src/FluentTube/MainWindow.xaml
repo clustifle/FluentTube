@@ -3,7 +3,7 @@
     <Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="*"/></Grid.RowDefinitions>
     <Grid x:Name="AppTitleBar" Background="Transparent" Padding="16,0,138,0">
       <StackPanel x:Name="TitleBarContent" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-        <FontIcon Glyph="&#xE714;" FontSize="14"/>
+        <Image Source="Assets/Icon32.png" Width="16" Height="16" AutomationProperties.AccessibilityView="Raw"/>
         <TextBlock Text="FluentTube" FontSize="12" VerticalAlignment="Center"/>
       </StackPanel>
     </Grid>
@@ -127,7 +127,7 @@
               </Grid>
               </Grid>
               <StackPanel Grid.Row="2" Spacing="8">
-                <StackPanel Orientation="Horizontal" Spacing="12"><HyperlinkButton x:Name="WatchChannel" Content="YouTube" Click="OpenWatchChannel" Padding="0"/><Button x:Name="WatchFollowButton" Content="Follow channel" Click="FollowWatchChannel"/><Button Content="Save for later" Click="SaveVideo"/><Button Content="Open on YouTube" Click="OpenInBrowser"/></StackPanel>
+                <StackPanel Spacing="8"><HyperlinkButton x:Name="WatchChannel" Content="YouTube" Click="OpenWatchChannel" Padding="0" HorizontalAlignment="Left"/><StackPanel x:Name="WatchActions" Orientation="Horizontal" Spacing="8"><Button x:Name="WatchFollowButton" Content="Follow channel" Click="FollowWatchChannel"/><Button Content="Save for later" Click="SaveVideo"/><Button Content="Open on YouTube" Click="OpenInBrowser"/></StackPanel></StackPanel>
                 <Expander Header="Description" HorizontalAlignment="Stretch"><ScrollViewer MaxHeight="100"><TextBlock x:Name="VideoDescription" TextWrapping="Wrap" IsTextSelectionEnabled="True"/></ScrollViewer></Expander>
               </StackPanel>
               <StackPanel x:Name="UpNextPanel" Grid.Column="1" Grid.RowSpan="3" Width="250" Margin="20,0,0,0" Spacing="12">
@@ -162,7 +162,7 @@
                 <Expander Header="Subscriptions" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"><StackPanel Spacing="12"><TextBlock Text="Import your YouTube subscriptions from a Google Takeout ZIP or subscriptions.csv. Existing local follows are kept. No Google Cloud setup or account connection is needed." TextWrapping="Wrap"/><StackPanel Orientation="Horizontal" Spacing="12"><Button Content="Import subscriptions" Click="ImportTakeout"/><HyperlinkButton Content="Open Google Takeout" NavigateUri="https://takeout.google.com/"/></StackPanel><TextBlock Text="In Takeout, select YouTube and YouTube Music, then include only subscriptions. This is a one-time import; changes do not sync with YouTube." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel></Expander>
                 <Expander Header="Startup" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"><ToggleSwitch x:Name="StartupChoice" Header="Open Watch later at startup" Toggled="SettingsChanged"/></Expander>
                 <Expander Header="About FluentTube" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                  <StackPanel Spacing="12"><TextBlock Text="FluentTube 0.9" FontWeight="SemiBold"/><TextBlock Text="WinUI 3 and .NET 10"/><TextBlock Text="Home, channels, local subscriptions, and history work without a Google account. Local follows do not change your YouTube subscriptions. Public video access uses yt-dlp and YouTube feeds; availability and codecs depend on YouTube and Windows." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
+                  <StackPanel Spacing="12"><TextBlock Text="FluentTube 1.0 RC1" FontWeight="SemiBold"/><TextBlock Text="WinUI 3 and .NET 10"/><TextBlock Text="Home, channels, local subscriptions, and history work without a Google account. Local follows do not change your YouTube subscriptions. Public video access uses yt-dlp and YouTube feeds; availability and codecs depend on YouTube and Windows." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
                 </Expander>
                 <Button Content="Reset preferences" Click="ResetSettings" Margin="0,8,0,0"/>
               </StackPanel>

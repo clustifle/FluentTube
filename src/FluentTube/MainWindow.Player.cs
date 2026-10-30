@@ -76,10 +76,11 @@ public sealed partial class MainWindow
     {
         VideoPoster.Visibility = Visibility.Collapsed;
         UpdateNaturalVideoRatio();
-        var position = qualitySeek ?? (preferences.RememberPosition && loadedVideoId is not null ? history.Get(loadedVideoId, media.PlaybackSession.NaturalDuration.TotalSeconds) : 0);
+        var position = qualitySeek ?? recoverySeek ?? (preferences.RememberPosition && loadedVideoId is not null ? history.Get(loadedVideoId, media.PlaybackSession.NaturalDuration.TotalSeconds) : 0);
         if (position > 0 && media.PlaybackSession.CanSeek) media.PlaybackSession.Position = TimeSpan.FromSeconds(Math.Min(position, media.PlaybackSession.NaturalDuration.TotalSeconds));
-        var start = qualityPlay ?? playWhenOpened;
+        var start = qualityPlay ?? recoveryPlay ?? playWhenOpened;
         qualitySeek = null; qualityPlay = null;
+        recoverySeek = null; recoveryPlay = null;
         if (start && PlayerPanel.Visibility == Visibility.Visible) media.Play();
         if (current is { LocalPath: null } && qualityLookupId != current.Id) _ = LoadVideoQualities(current.Id, playbackGeneration);
         RefreshPlayerControls();
@@ -173,13 +174,13 @@ public sealed partial class MainWindow
         PipPlayPauseButton.IsEnabled = loadedCurrent;
         PipPlayPauseButton.Content = new FontIcon { Glyph = playing ? "\uE769" : "\uE768", FontSize = 14 };
         PipSoundButton.Content = new FontIcon { Glyph = media.IsMuted || media.Volume == 0 ? "\uE74F" : "\uE767", FontSize = 14 };
-        PreviousButton.Visibility = NextButton.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 560 ? Visibility.Collapsed : Visibility.Visible;
-        PlayerSpeed.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 450 ? Visibility.Collapsed : Visibility.Visible;
-        PlayerQuality.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 430 ? Visibility.Collapsed : Visibility.Visible;
-        SeekBackwardButton.Visibility = SeekForwardButton.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 480 ? Visibility.Collapsed : Visibility.Visible;
+        PreviousButton.Visibility = NextButton.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 760 ? Visibility.Collapsed : Visibility.Visible;
+        PlayerSpeed.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 720 ? Visibility.Collapsed : Visibility.Visible;
+        PlayerQuality.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 500 ? Visibility.Collapsed : Visibility.Visible;
+        SeekBackwardButton.Visibility = SeekForwardButton.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 600 ? Visibility.Collapsed : Visibility.Visible;
         SoundButton.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
         FullscreenButton.Visibility = MorePlaybackButton.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
-        PipButton.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 400 ? Visibility.Collapsed : Visibility.Visible;
+        PipButton.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 500 ? Visibility.Collapsed : Visibility.Visible;
         VideoPresentationTitle.FontSize = isPictureInPicture ? 12 : 18;
         ToolTipService.SetToolTip(PipButton, isPictureInPicture ? "Return to app (I / Esc)" : "Picture in picture (I)");
         SoundButton.Content = new SymbolIcon(media.IsMuted || media.Volume == 0 ? Symbol.Mute : Symbol.Volume);
@@ -265,6 +266,8 @@ public sealed partial class MainWindow
     {
         // Inline height depends on width, never on the description height.
         if (VideoFrame.ActualWidth <= 0) return;
+        WatchActions.Orientation = VideoFrame.ActualWidth < 460 ? Orientation.Vertical : Orientation.Horizontal;
+        WatchChannel.MaxWidth = VideoFrame.ActualWidth;
         var portrait = videoRatio < 1;
         var width = portrait ? Math.Min(VideoFrame.ActualWidth, Math.Max(240, PlayerPanel.ActualHeight - 100) * videoRatio) : VideoFrame.ActualWidth;
         VideoSurfaceSlot.Width = width;
