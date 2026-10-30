@@ -23,12 +23,18 @@ public sealed partial class MainWindow
     private double pipZoom = 1;
     private PipWindowSizing? pipWindowSizing;
     private double? pipDraggedWidth;
+    private bool pipPreviousMaximized;
     [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "ShowWindow")]
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
     private static extern bool NativeShowWindow(IntPtr window, int command);
     [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "IsIconic")]
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
     private static extern bool NativeIsIconic(IntPtr window);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool ReleaseCapture();
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern IntPtr SendWindowMessage(IntPtr window, uint message, nuint wParam, IntPtr lParam);
     private double videoRatio = 16d / 9;
     private readonly Windows.UI.ViewManagement.UISettings motionSettings = new();
     private DateTimeOffset lastPlayerInput = DateTimeOffset.UtcNow;
@@ -178,7 +184,9 @@ public sealed partial class MainWindow
         PipPlayPauseButton.Content = new FontIcon { Glyph = playing ? "\uE769" : "\uE768", FontSize = 14 };
         PipSoundButton.Content = new FontIcon { Glyph = media.IsMuted || media.Volume == 0 ? "\uE74F" : "\uE767", FontSize = 14 };
         PreviousButton.Visibility = NextButton.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 760 ? Visibility.Collapsed : Visibility.Visible;
-        PlayerSpeed.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 720 ? Visibility.Collapsed : Visibility.Visible;
+        PlayerSpeed.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 340 ? Visibility.Collapsed : Visibility.Visible;
+        PlayerRepeatToggle.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
+        PlayerRepeatToggle.IsChecked = preferences.Loop;
         PlayerQuality.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 500 ? Visibility.Collapsed : Visibility.Visible;
         SeekBackwardButton.Visibility = SeekForwardButton.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 600 ? Visibility.Collapsed : Visibility.Visible;
         SoundButton.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
@@ -199,7 +207,8 @@ public sealed partial class MainWindow
         PlayerTimeline.IsEnabled = loadedCurrent && session.CanSeek && duration > 0;
         PipTimeline.IsEnabled = PlayerTimeline.IsEnabled;
         PlayerVolume.Value = media.Volume * 100;
-        PlayerSpeed.SelectedIndex = Array.IndexOf(new[] { 0.5, 0.75, 1, 1.25, 1.5, 2 }, preferences.Speed);
+        PlayerSpeed.Content = preferences.Speed.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "×";
+        SpeedSlider.Value = SpeedNumber.Value = preferences.Speed;
         syncingPlayer = false;
         PlayerTime.Text = $"{PlaybackMath.Time(seeking ? PlayerTimeline.Value : session.Position.TotalSeconds)} / {PlaybackMath.Time(duration)}";
         PipTime.Text = PlaybackMath.Time(seeking ? PlayerTimeline.Value : session.Position.TotalSeconds);
@@ -300,7 +309,29 @@ public sealed partial class MainWindow
         media.IsMuted = false;
         VolumeChoice.Value = PlayerVolume.Value;
     }
-    private void PlayerSpeedChanged(object sender, SelectionChangedEventArgs args) { if (ready && !syncingPlayer) SpeedChoice.SelectedIndex = PlayerSpeed.SelectedIndex; }
+    private int speedWheelRemainder;
+    private void SetPlaybackSpeed(double value)
+    {
+        if (closed || !ready || syncingPlayer || applyingSettings || !double.IsFinite(value)) return;
+        preferences.Speed = PlaybackMath.Speed(value);
+        syncingPlayer = true;
+        SpeedChoice.Value = SpeedSlider.Value = SpeedNumber.Value = preferences.Speed;
+        PlayerSpeed.Content = preferences.Speed.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "×";
+        syncingPlayer = false;
+        media.PlaybackSession.PlaybackRate = preferences.Speed;
+        try { preferences.Save(); } catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException) { }
+        ShowPlayerControls();
+    }
+    private void SpeedSliderChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs args) => SetPlaybackSpeed(args.NewValue);
+    private void SpeedNumberChanged(NumberBox sender, NumberBoxValueChangedEventArgs args) => SetPlaybackSpeed(args.NewValue);
+    private void SpeedWheelChanged(object sender, PointerRoutedEventArgs args)
+    {
+        speedWheelRemainder += args.GetCurrentPoint(PlayerSpeed).Properties.MouseWheelDelta;
+        var steps = speedWheelRemainder / 120; speedWheelRemainder %= 120;
+        if (steps != 0) SetPlaybackSpeed(preferences.Speed + steps * 0.05);
+        args.Handled = true;
+    }
+    private void PlayerRepeatClicked(object sender, RoutedEventArgs args) => LoopChoice.IsOn = PlayerRepeatToggle.IsChecked == true;
     private void TogglePlayPause(object sender, RoutedEventArgs args)
     {
         if (source is null || current?.Id != loadedVideoId) return;
@@ -342,6 +373,14 @@ public sealed partial class MainWindow
         NativeShowWindow(WinRT.Interop.WindowNative.GetWindowHandle(this), 6); // SW_MINIMIZE: restore from the taskbar.
         RefreshPlayerControls();
     }
+    private void ClosePlayerWindow(object sender, RoutedEventArgs args) => Close();
+    private void DragPictureInPicture(object sender, PointerRoutedEventArgs args)
+    {
+        if (!isPictureInPicture || !args.GetCurrentPoint(VideoDragRegion).Properties.IsLeftButtonPressed) return;
+        args.Handled = true;
+        ReleaseCapture();
+        SendWindowMessage(WinRT.Interop.WindowNative.GetWindowHandle(this), 0x00A1, 2, IntPtr.Zero);
+    }
     private void ResizePictureInPicture()
     {
         if (!isPictureInPicture || closed) return;
@@ -350,7 +389,7 @@ public sealed partial class MainWindow
         var scale = Root.XamlRoot?.RasterizationScale ?? 1;
         if (Math.Abs(videoRatio - pipSizedRatio) < 0.001 && Math.Abs(scale - pipSizedScale) < 0.001 && Math.Abs(pipZoom - pipSizedZoom) < 0.001) return;
         var workArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
-        (double Width, double Height) SizeAt(double zoom) => PlaybackMath.PipSize(videoRatio, Math.Min(420 * zoom, workArea.Width / scale * 0.8), Math.Min(420 * zoom, workArea.Height / scale * 0.8), zoom);
+        (double Width, double Height) SizeAt(double zoom) => PlaybackMath.PipSize(videoRatio, Math.Min(280 * zoom, workArea.Width / scale * 0.8), Math.Min(280 * zoom, workArea.Height / scale * 0.8), zoom);
         var size = SizeAt(pipZoom);
         if (pipDraggedWidth is double desiredWidth)
         {
@@ -389,6 +428,7 @@ public sealed partial class MainWindow
         {
             if (isFullscreen) SetFullscreen(false);
             pipPreviousPresenter = AppWindow.Presenter;
+            pipPreviousMaximized = pipPreviousPresenter is OverlappedPresenter { State: OverlappedPresenterState.Maximized };
             pipPreviousBounds = new Windows.Graphics.RectInt32(AppWindow.Position.X, AppWindow.Position.Y, AppWindow.Size.Width, AppWindow.Size.Height);
             try
             {
@@ -397,7 +437,9 @@ public sealed partial class MainWindow
                 compact.IsResizable = true;
                 compact.IsMaximizable = false;
                 compact.IsMinimizable = true;
+                compact.SetBorderAndTitleBar(true, false);
                 AppWindow.SetPresenter(compact);
+                compact.Restore();
                 pipWindowSizing ??= new PipWindowSizing(WinRT.Interop.WindowNative.GetWindowHandle(this),
                     () => isPictureInPicture && !closed, () => videoRatio,
                     () => { var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea; return (area.Width, area.Height); },
@@ -415,14 +457,22 @@ public sealed partial class MainWindow
             Navigation.Visibility = AppTitleBar.Visibility = Visibility.Collapsed;
             Root.RowDefinitions[0].Height = new GridLength(0);
             isPictureInPicture = true;
+            pipDraggedWidth = null; pipZoom = 1;
             pipSizedRatio = pipSizedScale = 0;
             ResizePictureInPicture();
-            SetTitleBar(VideoDragRegion);
+            var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+            var margin = (int)(24 * (Root.XamlRoot?.RasterizationScale ?? 1));
+            var floatX = Math.Clamp(pipPreviousBounds.X + (pipPreviousBounds.Width - AppWindow.Size.Width) / 2, area.X + margin, Math.Max(area.X + margin, area.X + area.Width - AppWindow.Size.Width - margin));
+            var floatY = Math.Clamp(pipPreviousBounds.Y + (pipPreviousBounds.Height - AppWindow.Size.Height) / 2, area.Y + margin, Math.Max(area.Y + margin, area.Y + area.Height - AppWindow.Size.Height - margin));
+            AppWindow.Move(new Windows.Graphics.PointInt32(floatX, floatY));
+            SetTitleBar(null);
         }
         else
         {
+            isPictureInPicture = false;
             if (pipPreviousPresenter is not null) AppWindow.SetPresenter(pipPreviousPresenter); else AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
-            if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Restored }) AppWindow.MoveAndResize(pipPreviousBounds);
+            if (pipPreviousMaximized && AppWindow.Presenter is OverlappedPresenter restored) restored.Maximize();
+            else AppWindow.MoveAndResize(pipPreviousBounds);
             FullscreenHost.Children.Remove(VideoSurface);
             VideoSurfaceSlot.Children.Add(VideoSurface);
             FullscreenHost.Visibility = Visibility.Collapsed;
@@ -430,10 +480,11 @@ public sealed partial class MainWindow
             Root.RowDefinitions[0].Height = new GridLength(32);
             isPictureInPicture = false;
             pipPreviousPresenter = null;
+            ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
         }
         UpdateTitleBar();
-        PipMinimizeButton.Visibility = Visibility.Collapsed; // Native resizable window supplies minimize and close.
+        PipMinimizeButton.Visibility = PipCloseButton.Visibility = isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
         PipSmallerButton.Visibility = PipLargerButton.Visibility = Visibility.Collapsed;
         VideoPresentationTitle.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
         PresentationReturnButton.Content = isPictureInPicture ? new FontIcon { Glyph = "\uE8A7", FontSize = 12 } : "Return to app";

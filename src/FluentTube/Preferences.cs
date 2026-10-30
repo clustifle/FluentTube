@@ -22,7 +22,7 @@ internal sealed class Preferences
         {
             var value = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(Path.Combine(LibraryStore.Folder, "settings.json"))) ?? new();
             value.Volume = double.IsFinite(value.Volume) ? Math.Clamp(value.Volume, 0, 1) : 0.8;
-            value.Speed = new[] { 0.5, 0.75, 1, 1.25, 1.5, 2 }.Contains(value.Speed) ? value.Speed : 1;
+            value.Speed = PlaybackMath.Speed(value.Speed);
             value.QualityHeight = value.QualityHeight == 0 || value.QualityHeight is >= 144 and <= 1080 ? value.QualityHeight : 0;
             return value;
         }

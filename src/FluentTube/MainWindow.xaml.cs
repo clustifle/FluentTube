@@ -477,7 +477,7 @@ public sealed partial class MainWindow : Window
         AutoplayChoice.IsOn = preferences.AutoPlay;
         LoopChoice.IsOn = preferences.Loop;
         VolumeChoice.Value = preferences.Volume * 100;
-        SpeedChoice.SelectedIndex = Array.IndexOf(new[] { 0.5, 0.75, 1, 1.25, 1.5, 2 }, preferences.Speed);
+        SpeedChoice.Value = preferences.Speed;
         StartupChoice.IsOn = preferences.StartWithSaved;
         ResumeChoice.IsOn = preferences.RememberPosition;
         NextChoice.IsOn = preferences.AutoPlayNext;
@@ -515,7 +515,7 @@ public sealed partial class MainWindow : Window
         preferences.AutoPlay = AutoplayChoice.IsOn;
         preferences.Loop = LoopChoice.IsOn;
         preferences.Volume = VolumeChoice.Value / 100;
-        preferences.Speed = new[] { 0.5, 0.75, 1, 1.25, 1.5, 2 }[Math.Clamp(SpeedChoice.SelectedIndex, 0, 5)];
+        preferences.Speed = PlaybackMath.Speed(SpeedChoice.Value);
         preferences.StartWithSaved = StartupChoice.IsOn;
         preferences.RememberPosition = ResumeChoice.IsOn;
         preferences.AutoPlayNext = NextChoice.IsOn;
@@ -543,7 +543,7 @@ public sealed partial class MainWindow : Window
         var titleBar = AppWindow.TitleBar;
         var scale = Root.XamlRoot?.RasterizationScale ?? 1;
         AppTitleBar.Padding = new Thickness(Math.Max(16, titleBar.LeftInset / scale), 0, titleBar.RightInset / scale, 0);
-        FullscreenHeading.Padding = isPictureInPicture ? new Thickness(6, 2, Math.Max(6, titleBar.RightInset / scale), 2) : new Thickness(16);
+        FullscreenHeading.Padding = isPictureInPicture ? new Thickness(6, 2, 6, 2) : new Thickness(16);
         ResizePictureInPicture();
         titleBar.ButtonForegroundColor = isPictureInPicture || Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
         titleBar.ButtonInactiveForegroundColor = isPictureInPicture || Root.ActualTheme == ElementTheme.Dark

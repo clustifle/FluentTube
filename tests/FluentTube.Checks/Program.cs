@@ -224,3 +224,10 @@ if (portraitDrag.Height - 8 > 600 || Math.Abs((portraitDrag.Width - 16d) / (port
 var tinyDrag = PipResizeGeometry.Apply(new(0, 0, 50, 50), 8, 1, 16, 8, false, 1200, 900, 400, 200);
 if (tinyDrag.Width - 16 != 400 || tinyDrag.Height - 8 != 400) throw new Exception("High-DPI minimum resize size failed.");
 Console.WriteLine("Passed all eight mouse-resize edges/corners, aspect locking, anchoring, screen limits, and DPI minimums.");
+for (var index = 10; index <= 60; index++)
+{
+    var expectedSpeed = index / 20d;
+    if (PlaybackMath.Speed(expectedSpeed) != expectedSpeed) throw new Exception("A 0.05-step playback speed was rejected.");
+}
+if (PlaybackMath.Speed(0.1) != 0.5 || PlaybackMath.Speed(4) != 3 || PlaybackMath.Speed(double.NaN) != 1 || PlaybackMath.Speed(0.549999999) != 0.55) throw new Exception("Playback speed normalization failed.");
+Console.WriteLine("Passed all 51 playback speeds, range boundaries, and decimal-rounding checks.");

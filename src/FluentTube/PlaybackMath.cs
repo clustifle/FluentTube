@@ -1,6 +1,7 @@
 namespace FluentTube;
 internal static class PlaybackMath
 {
+    internal static double Speed(double value) => !double.IsFinite(value) ? 1 : Math.Round(Math.Clamp(value, 0.5, 3) * 20, MidpointRounding.AwayFromZero) / 20;
     internal static (double Width, double Height) PipSize(double ratio, double maxWidth = 420, double maxHeight = 420, double zoom = 1)
     {
         if (!double.IsFinite(ratio) || ratio <= 0) ratio = 16d / 9;

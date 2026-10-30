@@ -4,6 +4,27 @@ using Windows.Storage;
 using System.Text.Json;
 using FluentTube;
 if (args.Length == 1 && args[0] == "--pip-resize") { PipSizingChecks.Run(); return; }
+if (args.Length == 2 && args[0] == "--rates")
+{
+    using var rateSource = MediaSource.CreateFromStorageFile(await StorageFile.GetFileFromPathAsync(Path.GetFullPath(args[1])));
+    using var ratePlayer = new MediaPlayer { Volume = 0 };
+    var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+    ratePlayer.MediaOpened += (_, _) => ready.TrySetResult(true);
+    ratePlayer.MediaFailed += (_, e) => ready.TrySetException(new Exception(e.ErrorMessage));
+    ratePlayer.Source = rateSource;
+    await ready.Task.WaitAsync(TimeSpan.FromSeconds(20));
+    foreach (var rate in new[] { 0.5, 0.55, 0.6, 1, 2, 3 })
+    {
+        ratePlayer.PlaybackSession.Position = TimeSpan.Zero;
+        ratePlayer.PlaybackSession.PlaybackRate = rate;
+        ratePlayer.Play();
+        await Task.Delay(1200);
+        if (Math.Abs(ratePlayer.PlaybackSession.PlaybackRate - rate) > 0.001 || ratePlayer.PlaybackSession.Position.TotalSeconds < 0.1) throw new Exception($"Native playback failed at {rate}x.");
+        ratePlayer.Pause();
+    }
+    Console.WriteLine("PASS native playback at 0.5x, 0.55x, 0.6x, 1x, 2x, and 3x");
+    return;
+}
 
 if (args.Length == 2 && args[0] == "--shorts")
 {

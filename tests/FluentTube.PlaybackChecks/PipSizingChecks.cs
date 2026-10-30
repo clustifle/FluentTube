@@ -5,6 +5,10 @@ internal static class PipSizingChecks
 {
     [StructLayout(LayoutKind.Sequential)]
     private struct Rect { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Point { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MinMax { public Point Reserved, MaxSize, MaxPosition, MinTrack, MaxTrack; }
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr CreateWindowEx(uint extendedStyle, string className, string name, uint style, int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr parameter);
     [DllImport("user32.dll")]
@@ -43,6 +47,22 @@ internal static class PipSizingChecks
             if (!sizing.IsResizing) throw new Exception("Native resize-start event missing.");
             SendMessage(window, 0x0232, 0, IntPtr.Zero);
             if (sizing.IsResizing || !ended) throw new Exception("Native resize-end event missing.");
+            var minmaxMemory = Marshal.AllocHGlobal(Marshal.SizeOf<MinMax>());
+            try
+            {
+                Marshal.StructureToPtr(new MinMax { MinTrack = new Point { X = 900, Y = 900 } }, minmaxMemory, false);
+                SendMessage(window, 0x0024, 0, minmaxMemory);
+                var minimum = Marshal.PtrToStructure<MinMax>(minmaxMemory);
+                if (minimum.MinTrack.X > 300 || minimum.MinTrack.Y > 250) throw new Exception("PiP inherited a large main-window minimum.");
+            }
+            finally { Marshal.FreeHGlobal(minmaxMemory); }
+            // An unchanged first resize proposal must not jump from the actual current bounds.
+            SendMessage(window, 0x0231, 0, IntPtr.Zero);
+            Marshal.StructureToPtr(outer, memory, false);
+            SendMessage(window, 0x0214, 2, memory);
+            var first = Marshal.PtrToStructure<Rect>(memory);
+            if (first.Right - first.Left > outer.Right - outer.Left + 1) throw new Exception("PiP enlarged at drag start.");
+            SendMessage(window, 0x0232, 0, IntPtr.Zero);
             active = false;
             Marshal.StructureToPtr(new Rect { Left = 1, Top = 2, Right = 555, Bottom = 333 }, memory, false);
             SendMessage(window, 0x0214, 8, memory);
@@ -50,7 +70,7 @@ internal static class PipSizingChecks
             active = true; sizing.Dispose();
             SendMessage(window, 0x0214, 8, memory);
             if (Marshal.PtrToStructure<Rect>(memory).Right != 555) throw new Exception("Native resize callback remained installed after disposal.");
-            Console.WriteLine("PASS native Windows PiP subclass: eight resize edges, client aspect ratio, resize lifecycle, normal-window passthrough, and cleanup");
+            Console.WriteLine("PASS native Windows PiP subclass: eight resize edges, aspect ratio, small tracking minimum, no drag-start growth, resize lifecycle, passthrough, and cleanup");
         }
         finally { Marshal.FreeHGlobal(memory); DestroyWindow(window); }
     }
