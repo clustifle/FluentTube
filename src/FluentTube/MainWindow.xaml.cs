@@ -15,7 +15,7 @@ public sealed partial class MainWindow : Window
     private readonly MediaPlayer media = new();
     private MediaSource? source;
     private Preferences preferences = Preferences.Load();
-    private bool ready, applyingSettings, closed;
+    private bool ready, applyingSettings, closed, syncingNavigation;
     private int playbackGeneration;
     public MainWindow()
     {
@@ -79,7 +79,7 @@ public sealed partial class MainWindow : Window
     }
     private async void Navigate(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
-        if (!ready) return;
+        if (!ready || syncingNavigation) return;
         request?.Cancel();
         if (args.IsSettingsSelected) { ShowPanel("settings"); return; }
         var tag = (args.SelectedItem as NavigationViewItem)?.Tag as string;
@@ -99,6 +99,9 @@ public sealed partial class MainWindow : Window
     }
     private async Task LoadVideos(string? query)
     {
+        syncingNavigation = true;
+        Navigation.SelectedItem = Navigation.MenuItems[0];
+        syncingNavigation = false;
         ShowPanel("browse");
         PageTitle.Text = query is null ? "Discover" : $"Results for “{query}”";
         WelcomePanel.Visibility = string.IsNullOrWhiteSpace(query) ? Visibility.Visible : Visibility.Collapsed;
@@ -115,6 +118,7 @@ public sealed partial class MainWindow : Window
         }
         var active = request = new CancellationTokenSource();
         Search.IsEnabled = false;
+        Videos.ItemsSource = null;
         EmptyCard.Visibility = Visibility.Collapsed;
         ShowMessage("Loading videos…");
         try
@@ -128,7 +132,16 @@ public sealed partial class MainWindow : Window
             ShowMessage($"{videos.Count} videos • YouTube search");
         }
         catch (OperationCanceledException) { }
-        catch (Exception e) { if (!active.IsCancellationRequested) ShowMessage(e is InvalidOperationException ? e.Message : "Could not reach YouTube. Check your connection and try again.", true); }
+        catch (Exception e)
+        {
+            if (!active.IsCancellationRequested)
+            {
+                EmptyState.Text = "We couldn't load these videos. Try another search or import a local video.";
+                EmptyState.Visibility = Visibility.Visible;
+                EmptyCard.Visibility = Visibility.Visible;
+                ShowMessage(e is InvalidOperationException ? e.Message : "Could not reach YouTube. Check your connection and try again.", true);
+            }
+        }
         finally { if (ReferenceEquals(active, request)) { if (!closed) Search.IsEnabled = true; request = null; } active.Dispose(); }
     }
     private async void SearchSubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
