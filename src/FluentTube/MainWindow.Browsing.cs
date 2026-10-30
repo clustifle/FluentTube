@@ -54,7 +54,7 @@ public sealed partial class MainWindow
         UpdateFollowButtons();
         if (!append)
         {
-            var cached = kind switch { "saved" => saved.ToList(), "history" => library.Watched.ToList(), "home" or "subscriptions" when library.Subscriptions.Count > 0 => library.Feed.ToList(), _ => new List<Video>() };
+            var cached = kind switch { "saved" => saved.ToList(), "history" => library.Watched.ToList(), "home" or "subscriptions" when library.Subscriptions.Count > 0 => library.Feed.ToList(), "home" when TopicChoice.SelectedIndex == 0 => library.Explore.ToList(), _ => new List<Video>() };
             RenderBrowse(cached, kind == "subscriptions" ? "No subscriptions yet. Choose Add channel, or open a channel from a video and follow it." : "Loading videos…");
         }
         BrowseProgress.Visibility = Visibility.Visible;
@@ -83,8 +83,12 @@ public sealed partial class MainWindow
             else
             {
                 var topic = TopicChoice.SelectedItem as string;
-                var search = kind == "search" ? query! : topic is null or "All" ? "science technology music documentaries" : topic;
-                videos = await YouTubeService.Fetch(search, active.Token, page);
+                if (kind == "home" && topic is null or "All")
+                {
+                    videos = await YouTubeService.FetchDiscovery(active.Token, page);
+                    if (!active.IsCancellationRequested && page == 1) { library.Explore = videos; SaveLibrary(); }
+                }
+                else videos = await YouTubeService.Fetch(kind == "search" ? query! : topic!, active.Token, page);
             }
             if (closed || active.IsCancellationRequested) return;
             browsePage = page;

@@ -11,6 +11,7 @@ internal sealed class LocalLibrary
     public List<ChannelSubscription> Subscriptions { get; set; } = [];
     public List<Video> Watched { get; set; } = [];
     public List<Video> Feed { get; set; } = [];
+    public List<Video> Explore { get; set; } = [];
     public static LocalLibrary Load()
     {
         try
@@ -19,6 +20,7 @@ internal sealed class LocalLibrary
             value.Subscriptions = (value.Subscriptions ?? []).Where(c => c is not null && YouTubeService.IsChannelId(c.Id)).DistinctBy(c => c.Id).ToList();
             value.Watched = (value.Watched ?? []).Where(v => v is not null).Take(200).ToList();
             value.Feed ??= [];
+            value.Explore ??= [];
             return value;
         }
         catch (Exception e) when (e is IOException or JsonException) { return new(); }

@@ -76,6 +76,18 @@ internal static partial class YouTubeService
         return ParseSearchResults(await Execute(start, cancellation));
     }
     internal sealed record ChannelPage(ChannelSubscription Channel, List<Video> Videos);
+    internal static async Task<List<Video>> FetchDiscovery(CancellationToken cancellation, int page = 1)
+    {
+        using var limit = new SemaphoreSlim(2);
+        var tasks = new[] { "technology", "music", "gaming" }.Select(async topic =>
+        {
+            await limit.WaitAsync(cancellation);
+            try { return (await Fetch(topic, cancellation, (page - 1) / 3 + 1)).Skip((page - 1) % 3 * 8).Take(8).ToList(); }
+            finally { limit.Release(); }
+        });
+        var groups = await Task.WhenAll(tasks);
+        return Enumerable.Range(0, 8).SelectMany(index => groups.Where(g => g.Count > index).Select(g => g[index])).DistinctBy(v => v.Id).ToList();
+    }
     internal static async Task<ChannelPage> FetchChannel(string input, CancellationToken cancellation, int page = 1)
     {
         var url = ParseChannelUrl(input) ?? throw new InvalidOperationException("Enter a YouTube channel URL, @handle, or channel ID.");
