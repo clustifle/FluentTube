@@ -17,6 +17,7 @@ public sealed partial class MainWindow
     private readonly DispatcherTimer seekTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
     private bool syncingPlayer, seeking, holdingPlayer, playerMenuOpen, isFullscreen;
     private bool controlsVisible = true, pointerInVideo, isPictureInPicture;
+    private UIElement? activeControlSurface;
     private AppWindowPresenter? pipPreviousPresenter;
     private Windows.Graphics.RectInt32 pipPreviousBounds;
     private double pipSizedRatio, pipSizedScale, pipSizedZoom;
@@ -179,6 +180,9 @@ public sealed partial class MainWindow
         RefreshCaptions();
         PlayPauseButton.Content = new SymbolIcon(playing ? Symbol.Pause : Symbol.Play);
         PlayPauseButton.IsEnabled = loadedCurrent;
+        ShortPlayPause.IsEnabled = loadedCurrent;
+        ShortPlayPause.Content = new FontIcon { Glyph = playing ? "\uE769" : "\uE768", FontSize = 14 };
+        ShortSound.Content = new FontIcon { Glyph = media.IsMuted || media.Volume == 0 ? "\uE74F" : "\uE767", FontSize = 14 };
         PipPlayPauseButton.IsEnabled = loadedCurrent;
         PipPlayPauseButton.Content = new FontIcon { Glyph = playing ? "\uE769" : "\uE768", FontSize = 14 };
         PipSoundButton.Content = new FontIcon { Glyph = media.IsMuted || media.Volume == 0 ? "\uE74F" : "\uE767", FontSize = 14 };
@@ -200,16 +204,18 @@ public sealed partial class MainWindow
         {
             PlayerTimeline.Maximum = Math.Max(1, duration);
             PlayerTimeline.Value = Math.Clamp(session.Position.TotalSeconds, 0, PlayerTimeline.Maximum);
+            ShortTimeline.Maximum = PlayerTimeline.Maximum; ShortTimeline.Value = PlayerTimeline.Value;
             PipTimeline.Maximum = PlayerTimeline.Maximum;
             PipTimeline.Value = PlayerTimeline.Value;
         }
         PlayerTimeline.IsEnabled = loadedCurrent && session.CanSeek && duration > 0;
-        PipTimeline.IsEnabled = PlayerTimeline.IsEnabled;
+        ShortTimeline.IsEnabled = PipTimeline.IsEnabled = PlayerTimeline.IsEnabled;
         PlayerVolume.Value = media.Volume * 100;
         PlayerSpeed.Content = preferences.Speed.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "×";
         SpeedSlider.Value = SpeedNumber.Value = preferences.Speed;
         syncingPlayer = false;
         PlayerTime.Text = $"{PlaybackMath.Time(seeking ? PlayerTimeline.Value : session.Position.TotalSeconds)} / {PlaybackMath.Time(duration)}";
+        ShortTime.Text = PlaybackMath.Time(seeking ? PlayerTimeline.Value : session.Position.TotalSeconds);
         PipTime.Text = PlaybackMath.Time(seeking ? PlayerTimeline.Value : session.Position.TotalSeconds);
         ToolTipService.SetToolTip(PlayerQuality, $"Playing at {session.NaturalVideoWidth} × {session.NaturalVideoHeight}");
         if (!holdingPlayer && !playerMenuOpen && !seeking && DateTimeOffset.UtcNow - lastPlayerInput > TimeSpan.FromSeconds(3))
@@ -248,7 +254,9 @@ public sealed partial class MainWindow
     private void SetControlsVisible(bool visible)
     {
         if (closed) return;
-        PlayerControls.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
+        PlayerControls.Visibility = isPictureInPicture || shortsFeed ? Visibility.Collapsed : Visibility.Visible;
+        ShortsControls.Visibility = shortsFeed && !isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
+        ShortsControls.IsHitTestVisible = visible;
         PipControls.Visibility = isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
         FullscreenHeading.Visibility = isFullscreen || isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
         PlayerControls.IsHitTestVisible = visible;
@@ -259,9 +267,12 @@ public sealed partial class MainWindow
             var heading = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(FullscreenHeading);
             heading.StopAnimation("Opacity"); heading.Opacity = 1;
         }
-        if (controlsVisible == visible) return;
+        var activeControls = isPictureInPicture ? PipControls : shortsFeed ? ShortsControls : PlayerControls;
+        var surfaceChanged = !ReferenceEquals(activeControlSurface, activeControls);
+        activeControlSurface = activeControls;
+        if (controlsVisible == visible && !surfaceChanged) return;
         controlsVisible = visible;
-        foreach (var element in new UIElement[] { PlayerControls, PipControls, FullscreenHeading })
+        foreach (var element in new UIElement[] { PlayerControls, ShortsControls, PipControls, FullscreenHeading })
         {
             if (isPictureInPicture && ReferenceEquals(element, FullscreenHeading)) continue;
             var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(element);
@@ -348,7 +359,7 @@ public sealed partial class MainWindow
     {
         for (var node = args.OriginalSource as DependencyObject; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
         {
-            if (ReferenceEquals(node, PlayerControls) || ReferenceEquals(node, PipControls) || ReferenceEquals(node, FullscreenHeading)) return;
+            if (ReferenceEquals(node, PlayerControls) || ReferenceEquals(node, PipControls) || ReferenceEquals(node, ShortsControls) || ReferenceEquals(node, FullscreenHeading)) return;
             if (ReferenceEquals(node, VideoSurface)) { SetFullscreen(!isFullscreen); args.Handled = true; return; }
         }
     }

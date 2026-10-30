@@ -8,7 +8,8 @@ public sealed partial class MainWindow
 {
     private bool shortsFeed, shortsMoving, shortsFetching;
     private int shortsPage = 1, shortsWheel;
-    private string? shortsChannel;
+    private string? shortsChannel, shortsSearchQuery;
+    private List<Video> searchShorts = [];
     private CancellationTokenSource? shortsRequest;
     private double shortWatched;
     private string? shortFeedbackId;
@@ -32,6 +33,18 @@ public sealed partial class MainWindow
         }));
         return ShortsRanking.Rank(groups.SelectMany(v => v), library.ShortsAffinity, library.SeenShorts);
     }
+    private async Task LoadSearchShorts(string query, CancellationToken token)
+    {
+        searchShorts = [];
+        HomeShorts.ItemsSource = null;
+        var clips = await YouTubeService.SearchShorts(query, token);
+        if (closed || token.IsCancellationRequested || browseKind != "search" || browseQuery != query) return;
+        searchShorts = clips;
+        HomeShorts.ItemsSource = clips;
+        HomeShortsHint.Text = clips.Count > 0 ? "Shorts matching your search. Open one and scroll for more." : "No Shorts found for this search.";
+    }
+    private void ShowShortsOptions(object sender, RoutedEventArgs args) => MorePlaybackButton.Flyout.ShowAt(ShortsMoreButton);
+    private void ShowPlaybackSpeed(object sender, RoutedEventArgs args) => DispatcherQueue.TryEnqueue(() => PlayerSpeed.Flyout.ShowAt(shortsFeed ? ShortsMoreButton : PlayerSpeed));
     private async Task LoadHomeShorts(CancellationToken token)
     {
         HomeShorts.ItemsSource = ShortsRanking.Rank(library.Shorts, library.ShortsAffinity, library.SeenShorts).Take(12).ToList();
@@ -57,7 +70,8 @@ public sealed partial class MainWindow
     private async void HomeShortClicked(object sender, ItemClickEventArgs args)
     {
         shortsFeed = true; shortsChannel = null; shortsPage = 1;
-        queue = ShortsRanking.Rank(library.Shorts, library.ShortsAffinity, library.SeenShorts);
+        shortsSearchQuery = browseKind == "search" ? browseQuery : null;
+        queue = shortsSearchQuery is null ? ShortsRanking.Rank(library.Shorts, library.ShortsAffinity, library.SeenShorts) : searchShorts.ToList();
         var video = (Video)args.ClickedItem;
         queue.RemoveAll(v => v.Id == video.Id); queue.Insert(0, video);
         await Play(video, startPlaying: true);
@@ -92,7 +106,7 @@ public sealed partial class MainWindow
         var active = shortsRequest = new CancellationTokenSource();
         try
         {
-            var clips = shortsChannel is null ? await FetchShortsMix(++shortsPage, active.Token) :
+            var clips = shortsSearchQuery is not null ? await YouTubeService.SearchShorts(shortsSearchQuery, active.Token, ++shortsPage) : shortsChannel is null ? await FetchShortsMix(++shortsPage, active.Token) :
                 await YouTubeService.FetchShorts(shortsChannel, active.Token, ++shortsPage);
             if (closed || active.IsCancellationRequested || !shortsFeed) return;
             var currentIndex = queue.FindIndex(v => v.Id == current?.Id);

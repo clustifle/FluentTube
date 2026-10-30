@@ -115,6 +115,29 @@ internal static partial class YouTubeService
         start.ArgumentList.Insert(start.ArgumentList.Count - 2, ((Math.Clamp(page, 1, 10) - 1) * 24 + 1).ToString());
         return ParseSearchResults(await Execute(start, cancellation));
     }
+    internal static ProcessStartInfo ShortsSearchProcess(string executable, string query, int page)
+    {
+        var start = SearchProcess(executable, "");
+        start.ArgumentList[^1] = "https://www.youtube.com/results?search_query=" + Uri.EscapeDataString(query) + "&sp=EgIQCQ%253D%253D";
+        var offset = start.ArgumentList.Count - 2;
+        foreach (var arg in new[] { "--playlist-start", ((Math.Clamp(page, 1, 10) - 1) * 24 + 1).ToString(), "--playlist-end", (Math.Clamp(page, 1, 10) * 24).ToString() }) start.ArgumentList.Insert(offset++, arg);
+        return start;
+    }
+    internal static async Task<List<Video>> SearchShorts(string query, CancellationToken cancellation, int page = 1)
+    {
+        var process = ShortsSearchProcess(HelperPath, query, page);
+        if (page == 1)
+        {
+            try
+            {
+                var clips = ShortsSearch.ParsePage(await FeedClient.GetStringAsync(process.ArgumentList[^1] + "&hl=en", cancellation));
+                if (clips.Count > 0) return clips;
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { throw; }
+            catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { }
+        }
+        return ParseSearchResults(await Execute(process, cancellation)).Where(v => v.IsShort).ToList();
+    }
     internal sealed record ChannelPage(ChannelSubscription Channel, List<Video> Videos);
     internal static async Task<List<Video>> FetchDiscovery(CancellationToken cancellation, int page = 1)
     {

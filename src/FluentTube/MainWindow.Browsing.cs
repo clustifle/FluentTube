@@ -37,11 +37,15 @@ public sealed partial class MainWindow
         var active = request = new CancellationTokenSource();
         browseRequest = active;
         ShowPanel("browse");
-        HomeShortsSection.Visibility = kind == "home" ? Visibility.Visible : Visibility.Collapsed;
+        HomeShortsSection.Visibility = kind is "home" or "search" ? Visibility.Visible : Visibility.Collapsed;
         HomeVideosHeading.Visibility = HomeShortsSection.Visibility;
+        HomeShortsHeading.Text = kind == "search" ? "Shorts results" : "Shorts";
+        HomeVideosHeading.Text = kind == "search" ? "Video results" : "Recommended videos";
+        WatchShortsButton.Visibility = kind == "home" ? Visibility.Visible : Visibility.Collapsed;
+        HomeShortsHint.Text = kind == "search" ? "Finding Shorts matching your search…" : "A quick mix for you. Scroll to discover your next favourite.";
         if (!append) { browseKind = kind; browseQuery = query; browsingChannel = channel; browsePage = 1; }
         var page = append ? browsePage + 1 : 1;
-        var homeShortsTask = kind == "home" && !append ? LoadHomeShorts(active.Token) : Task.CompletedTask;
+        var homeShortsTask = kind == "home" && !append ? LoadHomeShorts(active.Token) : kind == "search" && !append ? LoadSearchShorts(query!, active.Token) : Task.CompletedTask;
         syncingNavigation = true;
         Navigation.SelectedItem = Navigation.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => channel is not null ? i.Tag is ChannelSubscription c && c.Id == channel.Id : i.Tag as string == (kind == "search" ? "home" : kind));
         syncingNavigation = false;
@@ -111,7 +115,7 @@ public sealed partial class MainWindow
             if (kind is "shorts" or "channelshorts" && combined.Count > 0)
             {
                 if (kind == "shorts" && (ShortsSourceChoice.SelectedItem as ShortsSource)?.Url == "for-you") { library.Shorts = combined.Take(120).ToList(); SaveLibrary(); }
-                shortsFeed = true; shortsPage = page;
+                shortsFeed = true; shortsPage = page; shortsSearchQuery = null;
                 shortsChannel = kind == "channelshorts" ? channel!.Url : (ShortsSourceChoice.SelectedItem as ShortsSource)?.Url == "for-you" ? null : SelectedShortsSource;
                 queue = combined;
                 await Play(combined[0], startPlaying: true);

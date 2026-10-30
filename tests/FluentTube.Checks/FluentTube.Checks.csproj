@@ -8,4 +8,5 @@
   <ItemGroup><Compile Include="../../src/FluentTube/LocalLibrary.cs" Link="LocalLibrary.cs"/><Compile Include="../../src/FluentTube/LibraryStore.cs" Link="LibraryStore.cs"/></ItemGroup>
   <ItemGroup><Compile Include="../../src/FluentTube/YouTubeService.cs" Link="YouTubeService.cs"/><Compile Include="../../src/FluentTube/Video.cs" Link="Video.cs"/><Compile Include="../../src/FluentTube/StreamCache.cs" Link="StreamCache.cs"/><Compile Include="../../src/FluentTube/PlaybackMath.cs" Link="PlaybackMath.cs"/></ItemGroup>
   <ItemGroup><Compile Include="../../src/FluentTube/ShortsRanking.cs" Link="ShortsRanking.cs"/></ItemGroup>
+  <ItemGroup><Compile Include="../../src/FluentTube/ShortsSearch.cs" Link="ShortsSearch.cs"/></ItemGroup>
 </Project>

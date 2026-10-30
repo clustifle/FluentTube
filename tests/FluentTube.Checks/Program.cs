@@ -1,4 +1,10 @@
 using FluentTube;
+if (args.Length == 2 && args[0] == "--shorts-page")
+{
+    var pageClips = ShortsSearch.ParsePage(await File.ReadAllTextAsync(args[1]));
+    if (pageClips.Count < 3 || pageClips.Any(v => !v.IsShort)) throw new Exception("Live Shorts search shelf could not be parsed.");
+    Console.WriteLine($"Passed live Shorts search shelf: {pageClips.Count} distinct clips."); return;
+}
 if (args.FirstOrDefault() == "--shutdown-child") { await Task.Delay(Timeout.Infinite); return; }
 if (args.Length == 2 && args[0] == "--shutdown-parent")
 {
@@ -249,3 +255,24 @@ for (var attempt = 0; attempt < 30; attempt++)
 if (ShortsRanking.Feedback(1, 30) != -1 || ShortsRanking.Feedback(25, 30) != 2 || ShortsRanking.Feedback(10, 60) != 1 || ShortsRanking.Feedback(4, 60) != 0)
     throw new Exception("Shorts watch/skip feedback failed.");
 Console.WriteLine("Passed Shorts preferences, unseen priority, creator diversity, deduplication, and watch/skip feedback.");
+var shortsSearch = YouTubeService.ShortsSearchProcess("yt-dlp.exe", "cats & dogs #pets", 2);
+var shortsSearchUrl = shortsSearch.ArgumentList[^1];
+if (!shortsSearchUrl.Contains("search_query=cats%20%26%20dogs%20%23pets&sp=EgIQCQ%253D%253D") ||
+    shortsSearch.ArgumentList[shortsSearch.ArgumentList.IndexOf("--playlist-start") + 1] != "25" ||
+    shortsSearch.ArgumentList[shortsSearch.ArgumentList.IndexOf("--playlist-end") + 1] != "48")
+    throw new Exception("Shorts search lost query escaping, filter, or pagination.");
+Console.WriteLine("Passed Shorts search filter, literal query encoding, and pagination.");
+var shortsPageJson = """
+{"contents":[{"shortsLockupViewModel":{"onTap":{"innertubeCommand":{"reelWatchEndpoint":{"videoId":"dQw4w9WgXcQ"}}},"overlayMetadata":{"primaryText":{"content":"Cat Ω"}},"belowThumbnailMetadata":{"primaryText":{"content":"Creator"}},"thumbnailViewModel":{"thumbnailViewModel":{"image":{"sources":[{"url":"http://untrusted.invalid/image"},{"url":"https://i.ytimg.com/vi/dQw4w9WgXcQ/oar.jpg"}]}}}}}]}
+""";
+foreach (var pageText in new[] {
+    "<script>var ytInitialData = " + shortsPageJson + "; unrelated();</script>",
+    "<script>var ytInitialData = '" + string.Concat(shortsPageJson.Select(c => "\\u" + ((int)c).ToString("x4"))) + "'; unrelated();</script>"
+})
+{
+    var parsedClips = ShortsSearch.ParsePage(pageText);
+    if (parsedClips.Count != 1 || parsedClips[0].Title != "Cat Ω" || !parsedClips[0].IsShort || parsedClips[0].Preview != "https://i.ytimg.com/vi/dQw4w9WgXcQ/oar.jpg")
+        throw new Exception("Shorts shelf JSON decoding or thumbnail validation failed.");
+}
+if (ShortsSearch.ParsePage("var ytInitialData = 'bad \\xQZ';").Count != 0) throw new Exception("Malformed Shorts page was accepted.");
+Console.WriteLine("Passed plain/escaped Shorts shelf JSON, Unicode, thumbnail validation, and malformed page handling.");

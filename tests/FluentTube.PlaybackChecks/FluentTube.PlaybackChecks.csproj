@@ -6,6 +6,7 @@
     <Compile Include="../../src/FluentTube/HelperProcessRunner.cs" Link="HelperProcessRunner.cs"/>
     <Compile Include="../../src/FluentTube/Captions.cs" Link="Captions.cs"/>
     <Compile Include="../../src/FluentTube/YouTubeService.cs" Link="YouTubeService.cs"/>
+    <Compile Include="../../src/FluentTube/ShortsSearch.cs" Link="ShortsSearch.cs"/>
     <Compile Include="../../src/FluentTube/StreamCache.cs" Link="StreamCache.cs"/>
     <Compile Include="../../src/FluentTube/Video.cs" Link="Video.cs"/>
     <Compile Include="../../src/FluentTube/LocalLibrary.cs" Link="LocalLibrary.cs"/>

@@ -50,7 +50,7 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
         AppWindow.Changed += (_, _) => UpdateTitleBar();
-        Root.ActualThemeChanged += (_, _) => UpdateTitleBar();
+        Root.ActualThemeChanged += (_, _) => { UpdateAppearanceChrome(); UpdateTitleBar(); };
         Activated += (_, e) =>
         {
             TitleBarContent.Opacity = e.WindowActivationState == WindowActivationState.Deactivated ? 0.65 : 1;
@@ -217,7 +217,7 @@ public sealed partial class MainWindow : Window
     }
     private async Task StartVideo(Video video)
     {
-        shortsFeed = video.IsShort; shortsChannel = null; shortsPage = 1;
+        shortsFeed = video.IsShort; shortsChannel = null; shortsSearchQuery = null; shortsPage = 1;
         queue = browseVideos.Any(v => v.Id == video.Id) ? browseVideos.Where(v => !video.IsShort || v.IsShort).ToList() : [video];
         await Play(video);
     }
@@ -394,7 +394,7 @@ public sealed partial class MainWindow : Window
         ShortNavigation.Visibility = current?.IsShort == true ? Visibility.Visible : Visibility.Collapsed;
         PreviousShortButton.IsEnabled = index > 0;
         NextShortButton.IsEnabled = index >= 0 && (shortsFeed || index < queue.Count - 1);
-        ShortPosition.Text = shortsFeed ? "For you · Scroll ↓" : index >= 0 ? $"{index + 1} / {queue.Count}" : "Shorts";
+        ShortPosition.Text = shortsFeed ? (shortsSearchQuery is not null ? "Search · Scroll ↓" : shortsChannel is not null ? "Channel · Scroll ↓" : "For you · Scroll ↓") : index >= 0 ? $"{index + 1} / {queue.Count}" : "Shorts";
         QueueView.ItemsSource = queue.ToList();
         QueueView.SelectedItem = index >= 0 ? queue[index] : null;
     }
@@ -504,7 +504,7 @@ public sealed partial class MainWindow : Window
     {
         applyingSettings = true;
         ThemeChoice.SelectedItem = preferences.Theme;
-        AccentChoice.SelectedItem = preferences.Accent;
+        AppearanceChoice.SelectedItem = preferences.Appearance;
         CompactChoice.IsOn = preferences.CompactCards;
         AutoplayChoice.IsOn = preferences.AutoPlay;
         LoopChoice.IsOn = preferences.Loop;
@@ -521,17 +521,7 @@ public sealed partial class MainWindow : Window
     }
     private void ApplyPreferences()
     {
-        Root.RequestedTheme = preferences.Theme switch { "Light" => ElementTheme.Light, "Dark" => ElementTheme.Dark, _ => ElementTheme.Default };
-        var color = preferences.Accent switch
-        {
-            "Purple" => Windows.UI.Color.FromArgb(255, 137, 91, 221),
-            "Green" => Windows.UI.Color.FromArgb(255, 25, 145, 103),
-            "Orange" => Windows.UI.Color.FromArgb(255, 221, 111, 31),
-            "Rose" => Windows.UI.Color.FromArgb(255, 204, 74, 117),
-            _ => Windows.UI.Color.FromArgb(255, 0, 120, 212)
-        };
-        Root.Resources["SystemAccentColor"] = color;
-        Root.Resources["AccentFillColorDefaultBrush"] = new SolidColorBrush(color);
+        ApplyAppearance();
         UpdateTitleBar();
         media.Volume = preferences.Volume;
         media.IsLoopingEnabled = preferences.Loop;
@@ -542,7 +532,7 @@ public sealed partial class MainWindow : Window
     {
         if (!ready || applyingSettings) return;
         preferences.Theme = ThemeChoice.SelectedItem as string ?? "System";
-        preferences.Accent = AccentChoice.SelectedItem as string ?? "Blue";
+        preferences.Appearance = AppearanceChoice.SelectedItem as string ?? "Fluent";
         preferences.CompactCards = CompactChoice.IsOn;
         preferences.AutoPlay = AutoplayChoice.IsOn;
         preferences.Loop = LoopChoice.IsOn;
@@ -568,7 +558,7 @@ public sealed partial class MainWindow : Window
         try { preferences.Save(); ShowMessage("Preferences restored to defaults."); }
         catch (IOException) { ShowMessage("Could not save preferences.", true); }
     }
-    private void VideoCardLoaded(object sender, RoutedEventArgs args) => ResizeCards((DependencyObject)sender);
+    private void VideoCardLoaded(object sender, RoutedEventArgs args) { ResizeCards((DependencyObject)sender); ApplyAppearanceFont((DependencyObject)sender); }
     private void UpdateTitleBar()
     {
         if (closed) return;
@@ -578,8 +568,8 @@ public sealed partial class MainWindow : Window
         FullscreenHeading.Padding = isPictureInPicture ? new Thickness(6, 2, 6, 2) : new Thickness(16);
         ResizePictureInPicture();
         QueuePipButtonRegions();
-        titleBar.ButtonForegroundColor = isPictureInPicture || Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
-        titleBar.ButtonInactiveForegroundColor = isPictureInPicture || Root.ActualTheme == ElementTheme.Dark
+        titleBar.ButtonForegroundColor = isPictureInPicture || preferences.Appearance == "Windows XP" || Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
+        titleBar.ButtonInactiveForegroundColor = isPictureInPicture || preferences.Appearance == "Windows XP" || Root.ActualTheme == ElementTheme.Dark
             ? Windows.UI.Color.FromArgb(153, 255, 255, 255) : Windows.UI.Color.FromArgb(153, 0, 0, 0);
     }
     private void ResizeCards(DependencyObject node)

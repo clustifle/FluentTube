@@ -4,7 +4,7 @@ namespace FluentTube;
 internal sealed class Preferences
 {
     public string Theme { get; set; } = "System";
-    public string Accent { get; set; } = "Blue";
+    public string Appearance { get; set; } = "Fluent";
     public bool AutoPlay { get; set; } = true;
     public bool Loop { get; set; }
     public bool CompactCards { get; set; }
@@ -21,6 +21,8 @@ internal sealed class Preferences
         try
         {
             var value = JsonSerializer.Deserialize<Preferences>(File.ReadAllText(Path.Combine(LibraryStore.Folder, "settings.json"))) ?? new();
+            value.Appearance = value.Appearance == "Windows XP" ? "Windows XP" : "Fluent";
+            value.Theme = value.Theme is "Light" or "Dark" ? value.Theme : "System";
             value.Volume = double.IsFinite(value.Volume) ? Math.Clamp(value.Volume, 0, 1) : 0.8;
             value.Speed = PlaybackMath.Speed(value.Speed);
             value.QualityHeight = value.QualityHeight == 0 || value.QualityHeight is >= 144 and <= 1080 ? value.QualityHeight : 0;
