@@ -1,10 +1,11 @@
 namespace FluentTube;
 internal static class PlaybackMath
 {
-    internal static (double Width, double Height) PipSize(double ratio, double maxWidth = 420, double maxHeight = 420)
+    internal static (double Width, double Height) PipSize(double ratio, double maxWidth = 420, double maxHeight = 420, double zoom = 1)
     {
         if (!double.IsFinite(ratio) || ratio <= 0) ratio = 16d / 9;
-        var width = Math.Min(320, maxWidth);
+        zoom = double.IsFinite(zoom) ? Math.Clamp(zoom, 0.75, 2) : 1;
+        var width = Math.Min(320 * zoom, maxWidth);
         var height = width / ratio;
         if (height > maxHeight) { height = maxHeight; width = height * ratio; }
         return (width, height);

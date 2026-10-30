@@ -430,6 +430,8 @@ public sealed partial class MainWindow : Window
             case VirtualKey.M: media.IsMuted = !media.IsMuted; break;
             case VirtualKey.F: SetFullscreen(!isFullscreen); break;
             case VirtualKey.I: SetPictureInPicture(!isPictureInPicture); break;
+            case VirtualKey.Add when isPictureInPicture: ChangePictureInPictureSize(0.25); break;
+            case VirtualKey.Subtract when isPictureInPicture: ChangePictureInPictureSize(-0.25); break;
             case VirtualKey.Up when current?.IsShort == true: args.Handled = true; await MoveQueue(-1); return;
             case VirtualKey.Down when current?.IsShort == true: args.Handled = true; await MoveQueue(1); return;
             case VirtualKey.Escape: SetFullscreen(false); break;

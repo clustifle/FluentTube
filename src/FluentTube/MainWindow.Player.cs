@@ -19,7 +19,8 @@ public sealed partial class MainWindow
     private bool controlsVisible = true, pointerInVideo, isPictureInPicture;
     private AppWindowPresenter? pipPreviousPresenter;
     private Windows.Graphics.RectInt32 pipPreviousBounds;
-    private double pipSizedRatio, pipSizedScale;
+    private double pipSizedRatio, pipSizedScale, pipSizedZoom;
+    private double pipZoom = 1;
     [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "ShowWindow")]
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
     private static extern bool NativeShowWindow(IntPtr window, int command);
@@ -341,11 +342,26 @@ public sealed partial class MainWindow
         if (!isPictureInPicture || closed) return;
         if (NativeIsIconic(WinRT.Interop.WindowNative.GetWindowHandle(this))) return;
         var scale = Root.XamlRoot?.RasterizationScale ?? 1;
-        if (Math.Abs(videoRatio - pipSizedRatio) < 0.001 && Math.Abs(scale - pipSizedScale) < 0.001) return;
+        if (Math.Abs(videoRatio - pipSizedRatio) < 0.001 && Math.Abs(scale - pipSizedScale) < 0.001 && Math.Abs(pipZoom - pipSizedZoom) < 0.001) return;
         var workArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
-        var size = PlaybackMath.PipSize(videoRatio, Math.Min(420, workArea.Width / scale * 0.8), Math.Min(420, workArea.Height / scale * 0.8));
-        pipSizedRatio = videoRatio; pipSizedScale = scale;
+        (double Width, double Height) SizeAt(double zoom) => PlaybackMath.PipSize(videoRatio, Math.Min(420 * zoom, workArea.Width / scale * 0.8), Math.Min(420 * zoom, workArea.Height / scale * 0.8), zoom);
+        var size = SizeAt(pipZoom);
+        var larger = SizeAt(Math.Min(2, pipZoom + 0.25));
+        PipSmallerButton.IsEnabled = pipZoom > 0.75;
+        PipLargerButton.IsEnabled = pipZoom < 2 && (larger.Width - size.Width > 1 || larger.Height - size.Height > 1);
+        pipSizedRatio = videoRatio; pipSizedScale = scale; pipSizedZoom = pipZoom;
         AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(Math.Max(1, (int)Math.Round(size.Width * scale)), Math.Max(1, (int)Math.Round(size.Height * scale))));
+        var x = Math.Clamp(AppWindow.Position.X, workArea.X, Math.Max(workArea.X, workArea.X + workArea.Width - AppWindow.Size.Width));
+        var y = Math.Clamp(AppWindow.Position.Y, workArea.Y, Math.Max(workArea.Y, workArea.Y + workArea.Height - AppWindow.Size.Height));
+        if (x != AppWindow.Position.X || y != AppWindow.Position.Y) AppWindow.Move(new Windows.Graphics.PointInt32(x, y));
+    }
+    private void SmallerPictureInPicture(object sender, RoutedEventArgs args) => ChangePictureInPictureSize(-0.25);
+    private void LargerPictureInPicture(object sender, RoutedEventArgs args) => ChangePictureInPictureSize(0.25);
+    private void ChangePictureInPictureSize(double delta)
+    {
+        if (!isPictureInPicture) return;
+        pipZoom = Math.Clamp(pipZoom + delta, 0.75, 2);
+        ResizePictureInPicture(); ShowPlayerControls();
     }
     private void ReturnToWindow(object sender, RoutedEventArgs args)
     {
@@ -375,7 +391,7 @@ public sealed partial class MainWindow
             isPictureInPicture = true;
             pipSizedRatio = pipSizedScale = 0;
             ResizePictureInPicture();
-            SetTitleBar(VideoPresentationTitle);
+            SetTitleBar(VideoDragRegion);
         }
         else
         {
@@ -392,10 +408,13 @@ public sealed partial class MainWindow
         }
         UpdateTitleBar();
         PipMinimizeButton.Visibility = isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
+        PipSmallerButton.Visibility = PipLargerButton.Visibility = PipMinimizeButton.Visibility;
+        VideoPresentationTitle.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
         PresentationReturnButton.Content = isPictureInPicture ? new FontIcon { Glyph = "\uE8A7", FontSize = 12 } : "Return to app";
         PresentationReturnButton.MinWidth = PresentationReturnButton.MinHeight = 0;
         PresentationReturnButton.Padding = new Thickness(isPictureInPicture ? 4 : 8);
-        PresentationReturnButton.Width = PresentationReturnButton.Height = isPictureInPicture ? 26 : double.NaN;
+        PresentationReturnButton.Width = isPictureInPicture ? 22 : double.NaN;
+        PresentationReturnButton.Height = isPictureInPicture ? 24 : double.NaN;
         UpdateVideoSize();
         RefreshPlayerControls();
         ShowPlayerControls();

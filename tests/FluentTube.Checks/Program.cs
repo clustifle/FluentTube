@@ -166,3 +166,9 @@ if (await replacedCache.Get("expired", CancellationToken.None) != 2) throw new E
 try { await staleLookup; throw new Exception("Invalidated lookup completed with stale data."); } catch (OperationCanceledException) { }
 if (!replacedCache.TryGet("expired", out var refreshed) || refreshed != 2) throw new Exception("Stale lookup replaced the refreshed cache entry.");
 Console.WriteLine("Passed in-flight invalidation and fresh-stream recovery cache checks.");
+var smallerPip = PlaybackMath.PipSize(16d / 9, 840, 840, 0.75);
+var largerPip = PlaybackMath.PipSize(16d / 9, 840, 840, 2);
+if (smallerPip.Width != 240 || largerPip.Width != 640 || Math.Abs(largerPip.Width / largerPip.Height - 16d / 9) > 0.000001) throw new Exception("PiP zoom must resize while preserving aspect ratio.");
+var boundedPip = PlaybackMath.PipSize(9d / 16, 500, 400, 2);
+if (boundedPip.Height != 400 || boundedPip.Width != 225) throw new Exception("Enlarged portrait PiP exceeded display bounds.");
+Console.WriteLine("Passed scalable PiP zoom and display-bound checks.");
