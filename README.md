@@ -9,6 +9,7 @@ Open [Windows build](https://github.com/clustifle/FluentTube/actions/workflows/w
 ## Use
 
 - Paste a YouTube watch, Shorts, live, or youtu.be URL into the native search box to play without an API key.
+- You can also pass a YouTube URL as the first command-line argument to `FluentTube.exe` to open it directly.
 - Type a topic, creator, or song to search with the bundled **yt-dlp** helper. No API key, Google Cloud project, billing account, or sign-in is required. Discover is a starting screen, not a personalized or trending feed.
 - Click a video card to watch. Save for later keeps a local list across restarts.
 - Playback uses the official YouTube embedded player in **WebView2**. The player itself is web-based; the surrounding application is native WinUI 3. YouTube controls advertisements, embedding restrictions, availability, and sign-in requirements. Open on YouTube provides a browser fallback.

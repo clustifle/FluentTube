@@ -19,11 +19,14 @@ public sealed partial class MainWindow : Window
         Root.Loaded += Initialize;
         Closed += (_, _) => { request?.Cancel(); Player.Close(); };
     }
-    private void Initialize(object sender, RoutedEventArgs args)
+    private async void Initialize(object sender, RoutedEventArgs args)
     {
         saved = LibraryStore.LoadVideos();
         ready = true;
         ShowMessage("Search YouTube or paste a video link. No API key or Google Cloud account needed.");
+        var link = Environment.GetCommandLineArgs().Skip(1).FirstOrDefault();
+        var id = link is null ? null : YouTubeService.ParseVideoId(link);
+        if (id is not null) await Play(new Video(id, "YouTube video", "YouTube"));
     }
     private void ShowMessage(string message, bool error = false)
     {
