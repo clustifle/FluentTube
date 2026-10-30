@@ -21,6 +21,13 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         SystemBackdrop = new MicaBackdrop();
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(AppTitleBar);
+        AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
+        AppWindow.TitleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
+        AppWindow.TitleBar.LayoutMetricsChanged += (_, _) => UpdateTitleBar();
+        Root.ActualThemeChanged += (_, _) => UpdateTitleBar();
+        Activated += (_, e) => TitleBarContent.Opacity = e.WindowActivationState == WindowActivationState.Deactivated ? 0.65 : 1;
         Root.SizeChanged += (_, e) =>
         {
             ContentLayout.Padding = new Thickness(e.NewSize.Width < 800 ? 16 : 24, 16, e.NewSize.Width < 800 ? 16 : 24, 16);
@@ -44,6 +51,7 @@ public sealed partial class MainWindow : Window
     private async void Initialize(object sender, RoutedEventArgs args)
     {
         if (ready) return;
+        if (Root.XamlRoot is not null) Root.XamlRoot.Changed += (_, _) => UpdateTitleBar();
         saved = LibraryStore.LoadVideos();
         PopulateSettings();
         ready = true;
@@ -247,6 +255,7 @@ public sealed partial class MainWindow : Window
         };
         Root.Resources["SystemAccentColor"] = color;
         Root.Resources["AccentFillColorDefaultBrush"] = new SolidColorBrush(color);
+        UpdateTitleBar();
         media.Volume = preferences.Volume;
         media.IsLoopingEnabled = preferences.Loop;
         media.PlaybackSession.PlaybackRate = preferences.Speed;
@@ -276,6 +285,16 @@ public sealed partial class MainWindow : Window
         catch (IOException) { ShowMessage("Could not save preferences.", true); }
     }
     private void VideoCardLoaded(object sender, RoutedEventArgs args) => ResizeCards((DependencyObject)sender);
+    private void UpdateTitleBar()
+    {
+        if (closed) return;
+        var titleBar = AppWindow.TitleBar;
+        var scale = Root.XamlRoot?.RasterizationScale ?? 1;
+        AppTitleBar.Padding = new Thickness(Math.Max(16, titleBar.LeftInset / scale), 0, titleBar.RightInset / scale, 0);
+        titleBar.ButtonForegroundColor = Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
+        titleBar.ButtonInactiveForegroundColor = Root.ActualTheme == ElementTheme.Dark
+            ? Windows.UI.Color.FromArgb(153, 255, 255, 255) : Windows.UI.Color.FromArgb(153, 0, 0, 0);
+    }
     private void ResizeCards(DependencyObject node)
     {
         if (node is Border { Name: "VideoCard" } card)
