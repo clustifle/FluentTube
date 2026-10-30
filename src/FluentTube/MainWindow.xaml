@@ -11,8 +11,12 @@
       <NavigationView.MenuItems>
         <NavigationViewItem Content="Home" Tag="home" Icon="Home" IsSelected="True"/>
         <NavigationViewItem Content="Watch later" Tag="saved" Icon="Save"/>
+        <NavigationViewItem Content="History" Tag="history" Icon="Clock"/>
+        <NavigationViewItem Content="Subscriptions" Tag="subscriptions" Icon="People"/>
+        <NavigationViewItem x:Name="NowPlayingItem" Content="Now playing" Tag="player" Icon="Play" SelectsOnInvoked="False" IsEnabled="False"/>
         <NavigationViewItemSeparator/>
         <NavigationViewItem Content="Open file" Tag="import" Icon="OpenFile" SelectsOnInvoked="False"/>
+        <NavigationViewItemHeader x:Name="ChannelsNavHeader" Content="Followed channels" Visibility="Collapsed"/>
       </NavigationView.MenuItems>
       <Grid x:Name="ContentLayout" Padding="24,16,24,16" RowSpacing="16">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -25,7 +29,18 @@
           <Grid Padding="24">
             <ScrollViewer x:Name="BrowsePanel" HorizontalScrollBarVisibility="Disabled">
               <StackPanel Spacing="20">
-                <TextBlock x:Name="PageTitle" Text="Home" Style="{StaticResource TitleTextBlockStyle}" TextWrapping="Wrap"/>
+                <StackPanel Spacing="8">
+                  <TextBlock x:Name="PageTitle" Text="Home" Style="{StaticResource TitleTextBlockStyle}" TextWrapping="Wrap"/>
+                  <TextBlock x:Name="PageSubtitle" Text="Explore videos or follow channels to build your feed." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Refresh" Click="RefreshPage"/>
+                    <Button Content="Add channel" Click="AddChannel"/>
+                    <Button x:Name="FollowButton" Content="Follow" Click="FollowChannel" Visibility="Collapsed"/>
+                    <Button x:Name="ClearHistoryButton" Content="Clear history" Click="ClearWatchHistory" Visibility="Collapsed"/>
+                    <ComboBox x:Name="TopicChoice" SelectedIndex="0" SelectionChanged="TopicChanged" MinWidth="130" AutomationProperties.Name="Home topic"><x:String>All</x:String><x:String>Technology</x:String><x:String>Music</x:String><x:String>Gaming</x:String><x:String>Science</x:String><x:String>News</x:String></ComboBox>
+                  </StackPanel>
+                  <ProgressBar x:Name="BrowseProgress" IsIndeterminate="True" Visibility="Collapsed"/>
+                </StackPanel>
                 <Border x:Name="EmptyCard" Padding="0,8">
                   <TextBlock x:Name="EmptyState" Text="Search for a video above, or choose Open file to play a video from your device." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left"/>
                 </Border>
@@ -36,19 +51,30 @@
                         <Grid Height="163" Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="4">
                           <SymbolIcon Symbol="Video" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                           <Image Source="{x:Bind Thumbnail}" Stretch="UniformToFill"/>
+                          <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Background="#D0000000" CornerRadius="2" Margin="5" Padding="4,1"><TextBlock Text="{x:Bind DurationText}" Foreground="White" FontSize="11"/></Border>
                         </Grid>
                         <StackPanel Spacing="4" Padding="2,0,2,8">
                           <TextBlock Text="{x:Bind Title}" TextWrapping="Wrap" MaxLines="2" FontWeight="SemiBold"/>
-                          <TextBlock Text="{x:Bind Channel}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                          <HyperlinkButton Content="{x:Bind Channel}" Click="OpenCardChannel" Padding="0" FontSize="12" HorizontalAlignment="Left"/>
+                          <TextBlock Text="{x:Bind Details}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
                       </StackPanel>
+                      <Border.ContextFlyout><MenuFlyout>
+                        <MenuFlyoutItem Text="Play" Tag="{x:Bind}" Click="PlayCard"/>
+                        <MenuFlyoutItem Text="Play next" Tag="{x:Bind}" Click="QueueCardNext"/>
+                        <MenuFlyoutItem Text="Save to Watch later" Tag="{x:Bind}" Click="SaveCard"/>
+                        <MenuFlyoutItem Text="Remove from Watch later" Tag="{x:Bind}" Click="RemoveSavedCard"/>
+                        <MenuFlyoutItem Text="Open channel" Tag="{x:Bind}" Click="OpenCardChannel"/>
+                      </MenuFlyout></Border.ContextFlyout>
                     </Border>
                   </DataTemplate></GridView.ItemTemplate>
                 </GridView>
+                <Button x:Name="LoadMoreButton" Content="Load more" Click="LoadMore" HorizontalAlignment="Center" Visibility="Collapsed"/>
               </StackPanel>
             </ScrollViewer>
             <Grid x:Name="PlayerPanel" Visibility="Collapsed" RowSpacing="16">
-              <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+              <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
               <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <Button Click="BackToVideos" AutomationProperties.Name="Back to videos" ToolTipService.ToolTip="Back"><SymbolIcon Symbol="Back"/></Button>
@@ -60,7 +86,11 @@
                 </MediaPlayerElement>
                 <StackPanel x:Name="LoadingPlayback" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" IsHitTestVisible="False"><ProgressRing IsActive="True" Width="32" Height="32"/><TextBlock Text="Opening video…" Foreground="White"/></StackPanel>
               </Grid>
-              <CommandBar Grid.Row="2" Background="Transparent" DefaultLabelPosition="Right" HorizontalAlignment="Left" IsOpen="False">
+              <StackPanel Grid.Row="2" Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="12"><HyperlinkButton x:Name="WatchChannel" Content="YouTube" Click="OpenWatchChannel" Padding="0"/><Button x:Name="WatchFollowButton" Content="Follow channel" Click="FollowWatchChannel"/></StackPanel>
+                <Expander Header="Description" HorizontalAlignment="Stretch"><ScrollViewer MaxHeight="100"><TextBlock x:Name="VideoDescription" TextWrapping="Wrap" IsTextSelectionEnabled="True"/></ScrollViewer></Expander>
+              </StackPanel>
+              <CommandBar Grid.Row="3" Background="Transparent" DefaultLabelPosition="Right" HorizontalAlignment="Left" IsOpen="False">
                 <AppBarButton x:Name="PreviousButton" Icon="Previous" Label="Previous" Click="PreviousVideo" IsEnabled="False"/>
                 <AppBarButton Label="Back 10 s" Click="SeekBackward"><AppBarButton.Icon><FontIcon Glyph="&#xE7A7;"/></AppBarButton.Icon></AppBarButton>
                 <AppBarButton Label="Forward 10 s" Click="SeekForward"><AppBarButton.Icon><FontIcon Glyph="&#xE7A6;"/></AppBarButton.Icon></AppBarButton>
@@ -73,8 +103,16 @@
                   <AppBarButton Label="Retry playback" Icon="Refresh" Click="RetryPlayback"/>
                   <AppBarToggleButton x:Name="RepeatButton" Label="Repeat" Icon="RepeatAll" Click="ToggleRepeat"/>
                   <AppBarButton Label="Keyboard shortcuts" Click="ShowShortcuts"/>
+                  <AppBarButton Label="Show queue" Click="ShowQueue"/>
                 </CommandBar.SecondaryCommands>
               </CommandBar>
+              <StackPanel x:Name="UpNextPanel" Grid.Column="1" Grid.RowSpan="4" Width="250" Margin="20,0,0,0" Spacing="12">
+                <TextBlock Text="Up next" Style="{StaticResource SubtitleTextBlockStyle}"/>
+                <ToggleSwitch x:Name="QueueAutoplay" Header="Autoplay next" Toggled="QueueAutoplayChanged"/>
+                <ListView x:Name="QueueView" IsItemClickEnabled="True" ItemClick="VideoClicked" SelectionMode="Single" MaxHeight="420">
+                  <ListView.ItemTemplate><DataTemplate x:DataType="local:Video"><StackPanel Padding="4,8" Spacing="4"><TextBlock Text="{x:Bind Title}" TextWrapping="Wrap" MaxLines="2"/><TextBlock Text="{x:Bind Channel}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel></DataTemplate></ListView.ItemTemplate>
+                </ListView>
+              </StackPanel>
             </Grid>
             <ScrollViewer x:Name="SettingsPanel" Visibility="Collapsed" HorizontalScrollBarVisibility="Disabled">
               <StackPanel Spacing="16" MaxWidth="800" HorizontalAlignment="Left">
@@ -100,7 +138,7 @@
                 </Expander>
                 <Expander Header="Startup" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"><ToggleSwitch x:Name="StartupChoice" Header="Open Watch later at startup" Toggled="SettingsChanged"/></Expander>
                 <Expander Header="About FluentTube" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                  <StackPanel Spacing="12"><TextBlock Text="FluentTube 0.6" FontWeight="SemiBold"/><TextBlock Text="WinUI 3 and .NET 10"/><TextBlock Text="Search and public video playback use yt-dlp. No API key is required. Video availability and supported codecs depend on YouTube and Windows." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
+                  <StackPanel Spacing="12"><TextBlock Text="FluentTube 0.7" FontWeight="SemiBold"/><TextBlock Text="WinUI 3 and .NET 10"/><TextBlock Text="Home, channels, local subscriptions, and history work without a Google account. Local follows do not change your YouTube subscriptions. Public video access uses yt-dlp and YouTube feeds; availability and codecs depend on YouTube and Windows." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
                 </Expander>
                 <Button Content="Reset preferences" Click="ResetSettings" Margin="0,8,0,0"/>
               </StackPanel>

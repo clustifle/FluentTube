@@ -4,6 +4,20 @@ using Windows.Storage;
 using System.Text.Json;
 using FluentTube;
 
+if (args.Length > 0 && args[0] == "--browse")
+{
+    var channel = await YouTubeService.FetchChannel("@Microsoft", CancellationToken.None);
+    if (!YouTubeService.IsChannelId(channel.Channel.Id) || channel.Videos.Count == 0) throw new Exception("Channel browsing returned no identifiable videos.");
+    Console.WriteLine($"PASS channel: {channel.Channel.Name}, {channel.Videos.Count} uploads");
+    var feed = await YouTubeService.FetchSubscriptions([channel.Channel], CancellationToken.None);
+    if (feed.Videos.Count == 0 || feed.FailedChannels > 0) throw new Exception("Subscription feed failed.");
+    Console.WriteLine($"PASS subscription feed: {feed.Videos.Count} videos");
+    var nextPage = await YouTubeService.FetchChannel(channel.Channel.Url, CancellationToken.None, 2);
+    if (nextPage.Videos.Count == 0 || nextPage.Videos.Any(v => channel.Videos.Any(first => first.Id == v.Id))) throw new Exception("Channel pagination repeated page one.");
+    Console.WriteLine($"PASS channel page 2: {nextPage.Videos.Count} distinct uploads");
+    return;
+}
+
 // Windows integration check: decode a local file and a freshly resolved public
 // stream through the same MediaPlayer engine used by the WinUI control.
 if (args.Length != 2) throw new ArgumentException("Provide a sample MP4 path and yt-dlp stream metadata JSON path.");

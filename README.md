@@ -1,6 +1,6 @@
 # FluentTube
 
-A Windows 11 YouTube client built with **C#, .NET 10, and WinUI 3**. Version 0.6 uses a conventional Fluent layout: an integrated WinUI title bar with native Windows caption buttons, Mica backdrop, NavigationView, search box, video grid, native media controls, and Settings expanders. The title bar shares the window's Mica material, follows the app theme, and reserves space for caption buttons at the current display scale. Native playback, key-free search, local imports, and saved preferences are preserved. This is an early app, not a finished YouTube replacement.
+A Windows 11 YouTube client built with **C#, .NET 10, and WinUI 3**. Version 0.7 connects Home, channel browsing, local subscriptions, history, Watch later, and a watch queue in the standard Fluent/Mica interface. No API key or Google account is needed. This is a public-video client with local library features, not a complete signed-in YouTube replacement.
 
 ## Download
 
@@ -10,6 +10,11 @@ Requires Windows 11 x64. .NET and Windows App SDK runtimes are bundled. Builds a
 
 ## Watch and import
 
+- **Home** loads real videos at startup. With local follows, All shows recent uploads from your channels; without follows, it shows exploratory search results. Topic filters let you explore separately. This is not YouTube's signed-in recommendation algorithm.
+- **Channels** open from a creator link, Add channel, or a pasted `@handle`/channel URL. Browse uploads and use Load more for subsequent pages. Search results also support Load more (up to ten pages).
+- **Follow** on a channel page or watch page saves a local subscription. Followed channels appear in the sidebar; Subscriptions combines their recent uploads. YouTube feeds are used where available, with channel extraction as fallback. Home can show cached uploads while refreshing. Follows do not alter or sync Google account subscriptions.
+- **History** records videos once playback starts and keeps the last 200 unique videos. Clear history removes this local list after confirmation. Playback positions are stored separately.
+- The watch page shows the creator, description, and queue. Use Now playing to return after browsing. Right-click a video to play, play next, save, remove from Watch later, or open its channel. Video cards show duration, views, and dates when the source provides them.
 - Type a topic, creator, or song to search. No Google Cloud project, API key, billing account, or sign-in needed.
 - Paste a YouTube watch, Shorts, live, or youtu.be URL to open it in the native Windows player. yt-dlp resolves a combined audio/video stream; quality depends on what YouTube provides in this format (often 360p). Separate high-resolution audio/video merging is not implemented.
 - Choose **Import video** to open a local file. MP4, MKV, WebM, MOV, AVI, WMV, M4V, MP3, and M4A appear in the picker; actual decoding depends on installed Windows codecs. Files are opened in place, not copied or uploaded.

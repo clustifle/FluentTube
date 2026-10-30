@@ -71,3 +71,18 @@ var faultCache = new StreamCache<int>((_, _) => ++attempts == 1 ? Task.FromExcep
 try { await faultCache.Get("retry", CancellationToken.None); throw new Exception("Expected extraction failure."); } catch (InvalidOperationException) { }
 if (await faultCache.Get("retry", CancellationToken.None) != 7) throw new Exception("Faulted extraction could not be retried.");
 Console.WriteLine("Passed abandoned-worker cancellation and failed-extraction retry checks.");
+var channelId = "UCsBjURrPoezykLs9EqgamOA";
+foreach (var address in new[] { channelId, "https://www.youtube.com/channel/" + channelId + "/videos" })
+    if (YouTubeService.ParseChannelUrl(address) != "https://www.youtube.com/channel/" + channelId) throw new Exception("Channel ID parsing failed.");
+if (YouTubeService.ParseChannelUrl("@Microsoft") != "https://www.youtube.com/@Microsoft" || YouTubeService.ParseChannelUrl("https://youtube.com.evil.example/@Microsoft") is not null) throw new Exception("Channel URL validation failed.");
+var metadata = YouTubeService.ParseSearchResults("""{"entries":[{"id":"jNQXAC9IVRw","title":"Test","duration":90,"view_count":12000,"channel_id":"UCsBjURrPoezykLs9EqgamOA"},{"id":"dQw4w9WgXcQ","duration":null,"view_count":null}]}""");
+if (metadata.Count != 2 || metadata[0].DurationText != "1:30" || !metadata[0].Details.Contains("12K views") || metadata[1].Duration is not null) throw new Exception("Video metadata parsing failed.");
+var xml = """<feed xmlns="http://www.w3.org/2005/Atom" xmlns:yt="http://www.youtube.com/xml/schemas/2015"><entry><yt:videoId>jNQXAC9IVRw</yt:videoId><title>A &amp; B</title><published>2026-10-30T00:00:00Z</published></entry><entry><yt:videoId>invalid</yt:videoId></entry></feed>""";
+var uploads = YouTubeService.ParseFeed(xml, new(channelId, "Creator"));
+if (uploads.Count != 1 || uploads[0].Title != "A & B" || uploads[0].ChannelId != channelId || uploads[0].Published is null) throw new Exception("Subscription feed parsing failed.");
+var localLibrary = new LocalLibrary();
+localLibrary.Record(new("jNQXAC9IVRw", "One", "Creator"));
+localLibrary.Record(new("dQw4w9WgXcQ", "Two", "Creator"));
+localLibrary.Record(new("jNQXAC9IVRw", "One", "Creator"));
+if (localLibrary.Watched.Count != 2 || localLibrary.Watched[0].Id != "jNQXAC9IVRw") throw new Exception("Watch history ordering failed.");
+Console.WriteLine("Passed channel validation, video metadata, subscription feed, and history checks.");

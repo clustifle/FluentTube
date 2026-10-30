@@ -4,6 +4,8 @@
     <Compile Include="../../src/FluentTube/YouTubeService.cs" Link="YouTubeService.cs"/>
     <Compile Include="../../src/FluentTube/StreamCache.cs" Link="StreamCache.cs"/>
     <Compile Include="../../src/FluentTube/Video.cs" Link="Video.cs"/>
+    <Compile Include="../../src/FluentTube/LocalLibrary.cs" Link="LocalLibrary.cs"/>
+    <Compile Include="../../src/FluentTube/LibraryStore.cs" Link="LibraryStore.cs"/>
     <None Include="../../src/FluentTube/Tools/*" Link="Tools/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/>
   </ItemGroup>
 </Project>

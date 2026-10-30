@@ -26,6 +26,16 @@ public sealed partial class MainWindow : Window
     private string? loadedVideoId;
     private bool playWhenOpened;
     private string? preparingId;
+    private readonly LocalLibrary library = LocalLibrary.Load();
+    private string browseKind = "home";
+    private string? browseQuery;
+    private ChannelSubscription? browsingChannel;
+    private int browsePage = 1;
+    private List<Video> browseVideos = [];
+    private bool browseBusy;
+    private CancellationTokenSource? browseRequest;
+    private string? lastRecordedId;
+    private string currentDescription = "";
     public MainWindow()
     {
         InitializeComponent();
@@ -40,12 +50,20 @@ public sealed partial class MainWindow : Window
         Root.SizeChanged += (_, e) =>
         {
             ContentLayout.Padding = new Thickness(e.NewSize.Width < 800 ? 16 : 24, 16, e.NewSize.Width < 800 ? 16 : 24, 16);
+            UpNextPanel.Visibility = e.NewSize.Width >= 1150 ? Visibility.Visible : Visibility.Collapsed;
         };
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 840));
         Player.SetMediaPlayer(media);
         Root.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(PlayerKeyDown), true);
         historyTimer.Tick += (_, _) => SavePosition();
         historyTimer.Start();
+        media.PlaybackSession.PlaybackStateChanged += (_, _) => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (closed || current is null || loadedVideoId != current.Id || lastRecordedId == current.Id || media.PlaybackSession.PlaybackState != MediaPlaybackState.Playing) return;
+            library.Record(current);
+            lastRecordedId = current.Id;
+            SaveLibrary();
+        });
         media.MediaOpened += (_, _) => DispatcherQueue.TryEnqueue(() =>
         {
             if (closed) return;
@@ -85,6 +103,7 @@ public sealed partial class MainWindow : Window
         if (ready) return;
         if (Root.XamlRoot is not null) Root.XamlRoot.Changed += (_, _) => UpdateTitleBar();
         saved = LibraryStore.LoadVideos();
+        RefreshSubscriptionNavigation();
         PopulateSettings();
         ready = true;
         ApplyPreferences();
@@ -92,8 +111,10 @@ public sealed partial class MainWindow : Window
         var link = Environment.GetCommandLineArgs().Skip(1).FirstOrDefault();
         var id = link is null ? null : YouTubeService.ParseVideoId(link);
         if (id is not null) await Play(new Video(id, "YouTube video", "YouTube"));
+        else if (link is not null && YouTubeService.ParseChannelUrl(link) is not null) await OpenChannel(link);
         else if (link is not null && File.Exists(link)) await PlayLocal(link);
         else if (preferences.StartWithSaved) Navigation.SelectedItem = Navigation.MenuItems[1];
+        else await LoadBrowse("home");
     }
     private void ShowMessage(string message, bool error = false)
     {
@@ -111,6 +132,7 @@ public sealed partial class MainWindow : Window
         BrowsePanel.Visibility = panel == "browse" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPanel.Visibility = panel == "settings" ? Visibility.Visible : Visibility.Collapsed;
         PlayerPanel.Visibility = panel == "player" ? Visibility.Visible : Visibility.Collapsed;
+        NowPlayingItem.IsEnabled = current is not null;
     }
     private async void Navigate(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
@@ -118,74 +140,30 @@ public sealed partial class MainWindow : Window
         request?.Cancel();
         if (args.IsSettingsSelected) { ShowPanel("settings"); return; }
         var tag = (args.SelectedItem as NavigationViewItem)?.Tag as string;
+        if ((args.SelectedItem as NavigationViewItem)?.Tag is ChannelSubscription channel) { await LoadBrowse("channel", channel: channel); return; }
         if (tag == "import") { await PickVideo(); return; }
-        ShowPanel("browse");
-        if (tag == "saved")
-        {
-            PageTitle.Text = "Watch later";
-            queue = saved.ToList();
-            Videos.ItemsSource = queue;
-            EmptyState.Text = "Your saved videos will appear here. Open a video and choose Save for later.";
-            EmptyState.Visibility = saved.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-            EmptyCard.Visibility = EmptyState.Visibility;
-        }
-        else await LoadVideos(null);
+        await LoadBrowse(tag is "saved" or "history" or "subscriptions" ? tag : "home");
     }
-    private async Task LoadVideos(string? query)
-    {
-        syncingNavigation = true;
-        Navigation.SelectedItem = Navigation.MenuItems[0];
-        syncingNavigation = false;
-        ShowPanel("browse");
-        PageTitle.Text = query is null ? "Home" : $"Results for “{query}”";
-        request?.Cancel();
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            Videos.ItemsSource = null;
-            EmptyState.Text = "Search for a video above, or choose Open file to play a video from your device.";
-            EmptyState.Visibility = Visibility.Visible;
-            EmptyCard.Visibility = Visibility.Visible;
-            ShowMessage("Ready");
-            return;
-        }
-        var active = request = new CancellationTokenSource();
-        Search.IsEnabled = false;
-        Videos.ItemsSource = null;
-        EmptyCard.Visibility = Visibility.Collapsed;
-        ShowMessage("Loading videos…");
-        try
-        {
-            var videos = await YouTubeService.Fetch(query, active.Token);
-            if (active.IsCancellationRequested || closed) return;
-            queue = videos;
-            Videos.ItemsSource = queue;
-            EmptyState.Text = "No videos found. Try another search.";
-            EmptyState.Visibility = videos.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-            EmptyCard.Visibility = EmptyState.Visibility;
-            ShowMessage($"{videos.Count} videos • YouTube search");
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception e)
-        {
-            if (!active.IsCancellationRequested)
-            {
-                EmptyState.Text = "We couldn't load these videos. Try another search or import a local video.";
-                EmptyState.Visibility = Visibility.Visible;
-                EmptyCard.Visibility = Visibility.Visible;
-                ShowMessage(e is InvalidOperationException ? e.Message : "Could not reach YouTube. Check your connection and try again.", true);
-            }
-        }
-        finally { if (ReferenceEquals(active, request)) { if (!closed) Search.IsEnabled = true; request = null; } active.Dispose(); }
-    }
+    private Task LoadVideos(string? query) => LoadBrowse(string.IsNullOrWhiteSpace(query) ? "home" : "search", query);
     private async void SearchSubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {
         var query = args.QueryText.Trim();
         if (query.Length == 0) return;
         var id = YouTubeService.ParseVideoId(query);
-        if (id is not null) await Play(new Video(id, "YouTube video", "YouTube"));
+        if (id is not null) await StartVideo(new Video(id, "YouTube video", "YouTube"));
+        else if (YouTubeService.ParseChannelUrl(query) is not null) await OpenChannel(query);
         else await LoadVideos(query);
     }
-    private async void VideoClicked(object sender, ItemClickEventArgs args) => await Play((Video)args.ClickedItem);
+    private async void VideoClicked(object sender, ItemClickEventArgs args)
+    {
+        if (ReferenceEquals(sender, QueueView)) await Play((Video)args.ClickedItem);
+        else await StartVideo((Video)args.ClickedItem);
+    }
+    private async Task StartVideo(Video video)
+    {
+        queue = browseVideos.Any(v => v.Id == video.Id) ? browseVideos.ToList() : [video];
+        await Play(video);
+    }
     private void SetSource(MediaSource next, string id)
     {
         media.Pause();
@@ -197,14 +175,16 @@ public sealed partial class MainWindow : Window
     }
     private async Task Play(Video video, bool refresh = false, bool startPlaying = false)
     {
+        lastRecordedId = null;
         if (preparingId != video.Id) preparation?.Cancel();
         if (video.LocalPath is not null) { await PlayLocal(video.LocalPath, startPlaying); return; }
         if (YouTubeService.ParseVideoId(video.Id) != video.Id) { ShowMessage("This saved video link is invalid.", true); return; }
         if (!refresh && loadedVideoId == video.Id && source is not null && media.PlaybackSession.PlaybackState is MediaPlaybackState.Playing or MediaPlaybackState.Paused)
         {
             request?.Cancel();
-            current = video;
+            current = current?.Id == video.Id ? current : video;
             ShowPanel("player");
+            UpdateWatchDetails();
             UpdateQueueButtons();
             LoadingPlayback.Visibility = Visibility.Collapsed;
             if (preferences.AutoPlay || startPlaying) media.Play();
@@ -217,8 +197,10 @@ public sealed partial class MainWindow : Window
         var active = request = new CancellationTokenSource();
         var generation = ++playbackGeneration;
         current = video;
+        currentDescription = "";
         VideoTitle.Text = video.Title;
         ShowPanel("player");
+        UpdateWatchDetails();
         UpdateQueueButtons();
         media.Pause();
         LoadingPlayback.Visibility = Visibility.Visible;
@@ -228,8 +210,10 @@ public sealed partial class MainWindow : Window
         {
             var stream = await YouTubeService.ResolveStream(video.Id, active.Token);
             if (closed || active.IsCancellationRequested || generation != playbackGeneration) return;
-            current = video with { Title = stream.Title };
+            current = video with { Title = stream.Title, ChannelId = stream.ChannelId ?? video.ChannelId, Channel = stream.Channel != "YouTube" ? stream.Channel : video.Channel };
+            currentDescription = stream.Description;
             VideoTitle.Text = $"{stream.Title} • {stream.Quality}";
+            UpdateWatchDetails();
             playWhenOpened = preferences.AutoPlay || startPlaying;
             SetSource(MediaSource.CreateFromUri(stream.Url), video.Id);
         }
@@ -248,8 +232,11 @@ public sealed partial class MainWindow : Window
             var file = await StorageFile.GetFileFromPathAsync(Path.GetFullPath(path));
             if (closed || generation != playbackGeneration) return;
             current = new Video("local:" + file.Path, file.DisplayName, "Local video", file.Path);
+            currentDescription = "Local file: " + file.Name;
+            lastRecordedId = null;
             VideoTitle.Text = file.DisplayName;
             ShowPanel("player");
+            UpdateWatchDetails();
             UpdateQueueButtons();
             LoadingPlayback.Visibility = Visibility.Visible;
             playWhenOpened = preferences.AutoPlay || startPlaying;
@@ -273,12 +260,17 @@ public sealed partial class MainWindow : Window
     private async void NavigationInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
     {
         if ((args.InvokedItemContainer as NavigationViewItem)?.Tag as string == "import") await PickVideo();
+        else if ((args.InvokedItemContainer as NavigationViewItem)?.Tag as string == "player" && current is not null) await Play(current);
     }
     private void SaveVideo(object sender, RoutedEventArgs args)
     {
         if (current is null) return;
-        if (saved.Any(v => v.Id == current.Id)) { ShowMessage("This video is already saved."); return; }
-        try { var next = saved.Append(current).ToList(); LibraryStore.SaveVideos(next); saved = next; ShowMessage("Saved to Watch later."); }
+        SaveForLater(current);
+    }
+    private void SaveForLater(Video video)
+    {
+        if (saved.Any(v => v.Id == video.Id)) { ShowMessage("This video is already saved."); return; }
+        try { var next = saved.Append(video).ToList(); LibraryStore.SaveVideos(next); saved = next; ShowMessage("Saved to Watch later."); }
         catch (IOException) { ShowMessage("Could not save the video. Check available disk space.", true); }
     }
     private async void OpenInBrowser(object sender, RoutedEventArgs args)
@@ -323,6 +315,8 @@ public sealed partial class MainWindow : Window
         var index = queue.FindIndex(v => v.Id == current?.Id);
         PreviousButton.IsEnabled = index > 0;
         NextButton.IsEnabled = index >= 0 && index < queue.Count - 1;
+        QueueView.ItemsSource = queue.ToList();
+        QueueView.SelectedItem = index >= 0 ? queue[index] : null;
     }
     private async Task MoveQueue(int direction, bool autoPlay = false)
     {
@@ -395,6 +389,7 @@ public sealed partial class MainWindow : Window
         StartupChoice.IsOn = preferences.StartWithSaved;
         ResumeChoice.IsOn = preferences.RememberPosition;
         NextChoice.IsOn = preferences.AutoPlayNext;
+        QueueAutoplay.IsOn = preferences.AutoPlayNext;
         PrepareChoice.IsOn = preferences.PrepareOnHover;
         RepeatButton.IsChecked = preferences.Loop;
         applyingSettings = false;
@@ -431,6 +426,7 @@ public sealed partial class MainWindow : Window
         preferences.StartWithSaved = StartupChoice.IsOn;
         preferences.RememberPosition = ResumeChoice.IsOn;
         preferences.AutoPlayNext = NextChoice.IsOn;
+        QueueAutoplay.IsOn = preferences.AutoPlayNext;
         preferences.PrepareOnHover = PrepareChoice.IsOn;
         RepeatButton.IsChecked = preferences.Loop;
         if (!preferences.PrepareOnHover) preparation?.Cancel();
