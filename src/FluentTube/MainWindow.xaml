@@ -1,0 +1,54 @@
+<Window x:Class="FluentTube.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="using:FluentTube" Title="FluentTube">
+  <Grid x:Name="Root">
+    <NavigationView x:Name="Navigation" PaneDisplayMode="Left" IsBackButtonVisible="Collapsed" SelectionChanged="Navigate" Header="FluentTube">
+      <NavigationView.MenuItems>
+        <NavigationViewItem Content="Discover" Tag="home" Icon="Home" IsSelected="True" />
+        <NavigationViewItem Content="Watch later" Tag="saved" Icon="Save" />
+      </NavigationView.MenuItems>
+      <Grid Padding="28,8,28,24" RowSpacing="16">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <AutoSuggestBox x:Name="Search" PlaceholderText="Search YouTube or paste a video URL" QueryIcon="Find" QuerySubmitted="SearchSubmitted" AutomationProperties.Name="Search YouTube" />
+        <InfoBar x:Name="Status" Grid.Row="1" IsOpen="True" IsClosable="False" Severity="Informational" Title="Welcome to FluentTube" Message="Open a YouTube link, or add your YouTube Data API key in Settings to discover and search videos." />
+        <Grid Grid.Row="2">
+          <ScrollViewer x:Name="BrowsePanel">
+            <StackPanel Spacing="20">
+              <TextBlock x:Name="PageTitle" Text="Your next favorite video" Style="{StaticResource TitleTextBlockStyle}"/>
+              <TextBlock x:Name="EmptyState" Text="Paste a YouTube video link above to start watching. Search and discovery use your own YouTube Data API v3 key." TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left"/>
+              <GridView x:Name="Videos" IsItemClickEnabled="True" ItemClick="VideoClicked" SelectionMode="None">
+                <GridView.ItemTemplate>
+                  <DataTemplate x:DataType="local:Video">
+                    <Border Width="290" Margin="0,0,12,16" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                      <StackPanel Spacing="8">
+                        <Image Source="{x:Bind Thumbnail}" Height="163" Stretch="UniformToFill"/>
+                        <StackPanel Margin="12,0,12,16" Spacing="6"><TextBlock Text="{x:Bind Title}" TextWrapping="Wrap" MaxLines="2" FontWeight="SemiBold"/><TextBlock Text="{x:Bind Channel}" Opacity="0.65"/></StackPanel>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </GridView.ItemTemplate>
+              </GridView>
+            </StackPanel>
+          </ScrollViewer>
+          <Grid x:Name="PlayerPanel" Visibility="Collapsed" RowSpacing="12">
+            <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <WebView2 x:Name="Player" MinHeight="240"/>
+            <TextBlock x:Name="VideoTitle" Grid.Row="1" TextWrapping="Wrap" Style="{StaticResource SubtitleTextBlockStyle}"/>
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="12">
+              <Button Content="Save for later" Click="SaveVideo"/><Button Content="Open on YouTube" Click="OpenInBrowser"/><Button Content="Back to videos" Click="BackToVideos"/>
+            </StackPanel>
+          </Grid>
+          <ScrollViewer x:Name="SettingsPanel" Visibility="Collapsed">
+            <StackPanel Spacing="16" MaxWidth="600" HorizontalAlignment="Left">
+              <TextBlock Text="Settings" Style="{StaticResource TitleTextBlockStyle}"/>
+              <TextBlock Text="YouTube Data API v3 key" FontWeight="SemiBold"/>
+              <PasswordBox x:Name="ApiKey" PlaceholderText="Enter your API key" AutomationProperties.Name="YouTube API key"/>
+              <TextBlock Text="Your key is protected with Windows DPAPI for your Windows account. Requests go directly to Google. No FluentTube server is used." TextWrapping="Wrap"/>
+              <Button Content="Save settings" Click="SaveSettings" Style="{StaticResource AccentButtonStyle}"/>
+              <TextBlock Text="FluentTube 0.1 • Native WinUI 3 + .NET 10"/>
+              <TextBlock Text="Video playback uses YouTube's official web player inside WebView2. Availability, ads, and playback restrictions are controlled by YouTube. FluentTube is an independent project." TextWrapping="Wrap"/>
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+      </Grid>
+    </NavigationView>
+  </Grid>
+</Window>

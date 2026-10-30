@@ -1,0 +1,23 @@
+name: Windows build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish native Windows x64 app
+        run: dotnet publish src/FluentTube/FluentTube.csproj -c Release -p:Platform=x64 -o artifacts/FluentTube-win-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FluentTube-win-x64
+          path: artifacts/FluentTube-win-x64/
+          if-no-files-found: error
