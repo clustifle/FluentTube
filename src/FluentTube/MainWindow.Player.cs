@@ -16,7 +16,9 @@ public sealed partial class MainWindow
     private readonly DispatcherTimer playerTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private readonly DispatcherTimer seekTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
     private bool syncingPlayer, seeking, holdingPlayer, playerMenuOpen, isFullscreen;
-    private bool controlsVisible = true, pointerInVideo;
+    private bool controlsVisible = true, pointerInVideo, isPictureInPicture;
+    private AppWindowPresenter? pipPreviousPresenter;
+    private Windows.Graphics.RectInt32 pipPreviousBounds;
     private double videoRatio = 16d / 9;
     private readonly Windows.UI.ViewManagement.UISettings motionSettings = new();
     private DateTimeOffset lastPlayerInput = DateTimeOffset.UtcNow;
@@ -149,7 +151,10 @@ public sealed partial class MainWindow
         PlayPauseButton.Content = new SymbolIcon(playing ? Symbol.Pause : Symbol.Play);
         PlayPauseButton.IsEnabled = loadedCurrent;
         PreviousButton.Visibility = NextButton.Visibility = VideoSurface.ActualWidth < 560 ? Visibility.Collapsed : Visibility.Visible;
-        PlayerSpeed.Visibility = VideoSurface.ActualWidth < 450 ? Visibility.Collapsed : Visibility.Visible;
+        PlayerSpeed.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 450 ? Visibility.Collapsed : Visibility.Visible;
+        PlayerQuality.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
+        SeekBackwardButton.Visibility = SeekForwardButton.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
+        ToolTipService.SetToolTip(PipButton, isPictureInPicture ? "Return to app (I / Esc)" : "Picture in picture (I)");
         SoundButton.Content = new SymbolIcon(media.IsMuted || media.Volume == 0 ? Symbol.Mute : Symbol.Volume);
         var duration = session.NaturalDuration.TotalSeconds;
         syncingPlayer = true;
@@ -198,7 +203,7 @@ public sealed partial class MainWindow
     private void PlayerControlsGettingFocus(UIElement sender, GettingFocusEventArgs args) => ShowPlayerControls();
     private void SetControlsVisible(bool visible)
     {
-        FullscreenHeading.Visibility = isFullscreen ? Visibility.Visible : Visibility.Collapsed;
+        FullscreenHeading.Visibility = isFullscreen || isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
         PlayerControls.IsHitTestVisible = visible;
         FullscreenHeading.IsHitTestVisible = visible;
         if (controlsVisible == visible) return;
@@ -275,12 +280,60 @@ public sealed partial class MainWindow
         ShowMessage("The selected quality could not play. Continuing with the compatible stream.");
         return true;
     }
+    private void TogglePictureInPicture(object sender, RoutedEventArgs args) => SetPictureInPicture(!isPictureInPicture);
+    private void ReturnToWindow(object sender, RoutedEventArgs args)
+    {
+        if (isPictureInPicture) SetPictureInPicture(false); else SetFullscreen(false);
+    }
+    private void SetPictureInPicture(bool value)
+    {
+        if (closed || value == isPictureInPicture || value && (current is null || PlayerPanel.Visibility != Visibility.Visible)) return;
+        if (value)
+        {
+            if (isFullscreen) SetFullscreen(false);
+            pipPreviousPresenter = AppWindow.Presenter;
+            pipPreviousBounds = new Windows.Graphics.RectInt32(AppWindow.Position.X, AppWindow.Position.Y, AppWindow.Size.Width, AppWindow.Size.Height);
+            try
+            {
+                var compact = CompactOverlayPresenter.Create();
+                compact.InitialSize = CompactOverlaySize.Medium;
+                AppWindow.SetPresenter(compact);
+            }
+            catch (Exception) { pipPreviousPresenter = null; ShowMessage("Windows could not open picture in picture. Playback remains in this window.", true); return; }
+            VideoSurfaceSlot.Children.Remove(VideoSurface);
+            FullscreenHost.Children.Add(VideoSurface);
+            FullscreenHost.Visibility = Visibility.Visible;
+            Navigation.Visibility = AppTitleBar.Visibility = Visibility.Collapsed;
+            Root.RowDefinitions[0].Height = new GridLength(0);
+            isPictureInPicture = true;
+            SetTitleBar(VideoPresentationTitle);
+        }
+        else
+        {
+            if (pipPreviousPresenter is not null) AppWindow.SetPresenter(pipPreviousPresenter); else AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+            if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Restored }) AppWindow.MoveAndResize(pipPreviousBounds);
+            FullscreenHost.Children.Remove(VideoSurface);
+            VideoSurfaceSlot.Children.Add(VideoSurface);
+            FullscreenHost.Visibility = Visibility.Collapsed;
+            Navigation.Visibility = AppTitleBar.Visibility = Visibility.Visible;
+            Root.RowDefinitions[0].Height = new GridLength(32);
+            isPictureInPicture = false;
+            pipPreviousPresenter = null;
+            SetTitleBar(AppTitleBar);
+        }
+        UpdateTitleBar();
+        UpdateVideoSize();
+        RefreshPlayerControls();
+        ShowPlayerControls();
+        Player.Focus(FocusState.Programmatic);
+    }
     private void ToggleFullscreen(object sender, RoutedEventArgs args) => SetFullscreen(!isFullscreen);
     private void SetFullscreen(bool value)
     {
         if (closed || value == isFullscreen || value && PlayerPanel.Visibility != Visibility.Visible) return;
         if (value)
         {
+            if (isPictureInPicture) SetPictureInPicture(false);
             previousPresenter = AppWindow.Presenter;
             VideoSurfaceSlot.Children.Remove(VideoSurface);
             FullscreenHost.Children.Add(VideoSurface);

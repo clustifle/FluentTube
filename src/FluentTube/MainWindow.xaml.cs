@@ -125,7 +125,7 @@ public sealed partial class MainWindow : Window
     }
     private void ShowPanel(string panel)
     {
-        if (panel != "player") { SetFullscreen(false); playbackGeneration++; SavePosition(); media.Pause(); }
+        if (panel != "player") { SetPictureInPicture(false); SetFullscreen(false); playbackGeneration++; SavePosition(); media.Pause(); }
         BrowsePanel.Visibility = panel == "browse" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPanel.Visibility = panel == "settings" ? Visibility.Visible : Visibility.Collapsed;
         PlayerPanel.Visibility = panel == "player" ? Visibility.Visible : Visibility.Collapsed;
@@ -354,13 +354,13 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             XamlRoot = Root.XamlRoot, Title = "Playback shortcuts", CloseButtonText = "Close",
-            Content = new TextBlock { Text = "Space / K: Play or pause\nJ / L: Back or forward 10 seconds\nM: Mute or unmute\nF or double-click video: Fullscreen\nEscape: Leave fullscreen\nP / N: Previous or next video\n\nShortcuts are inactive while typing or adjusting controls.", TextWrapping = TextWrapping.Wrap }
+            Content = new TextBlock { Text = "Space / K: Play or pause\nJ / L: Back or forward 10 seconds\nM: Mute or unmute\nF or double-click video: Fullscreen\nI: Picture in picture\nEscape: Return to app\nP / N: Previous or next video\n\nShortcuts are inactive while typing or adjusting controls.", TextWrapping = TextWrapping.Wrap }
         };
         await dialog.ShowAsync();
     }
     private async void PlayerKeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (isFullscreen && args.Key == VirtualKey.Escape) { SetFullscreen(false); args.Handled = true; return; }
+        if ((isFullscreen || isPictureInPicture) && args.Key == VirtualKey.Escape) { ReturnToWindow(sender, args); args.Handled = true; return; }
         if (args.Handled || PlayerPanel.Visibility != Visibility.Visible) return;
         var focused = FocusManager.GetFocusedElement(Root.XamlRoot) as DependencyObject;
         for (var node = focused; node is not null; node = VisualTreeHelper.GetParent(node))
@@ -381,6 +381,7 @@ public sealed partial class MainWindow : Window
             case VirtualKey.L: Seek(10); break;
             case VirtualKey.M: media.IsMuted = !media.IsMuted; break;
             case VirtualKey.F: SetFullscreen(!isFullscreen); break;
+            case VirtualKey.I: SetPictureInPicture(!isPictureInPicture); break;
             case VirtualKey.Escape: SetFullscreen(false); break;
             case VirtualKey.P: args.Handled = true; await MoveQueue(-1); return;
             case VirtualKey.N: args.Handled = true; await MoveQueue(1); return;
@@ -462,8 +463,9 @@ public sealed partial class MainWindow : Window
         var titleBar = AppWindow.TitleBar;
         var scale = Root.XamlRoot?.RasterizationScale ?? 1;
         AppTitleBar.Padding = new Thickness(Math.Max(16, titleBar.LeftInset / scale), 0, titleBar.RightInset / scale, 0);
-        titleBar.ButtonForegroundColor = Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
-        titleBar.ButtonInactiveForegroundColor = Root.ActualTheme == ElementTheme.Dark
+        FullscreenHeading.Padding = isPictureInPicture ? new Thickness(8, 4, Math.Max(8, titleBar.RightInset / scale), 4) : new Thickness(16);
+        titleBar.ButtonForegroundColor = isPictureInPicture || Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
+        titleBar.ButtonInactiveForegroundColor = isPictureInPicture || Root.ActualTheme == ElementTheme.Dark
             ? Windows.UI.Color.FromArgb(153, 255, 255, 255) : Windows.UI.Color.FromArgb(153, 0, 0, 0);
     }
     private void ResizeCards(DependencyObject node)
