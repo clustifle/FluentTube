@@ -19,6 +19,13 @@ public sealed partial class MainWindow
     private bool controlsVisible = true, pointerInVideo, isPictureInPicture;
     private AppWindowPresenter? pipPreviousPresenter;
     private Windows.Graphics.RectInt32 pipPreviousBounds;
+    private double pipSizedRatio, pipSizedScale;
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "ShowWindow")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool NativeShowWindow(IntPtr window, int command);
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "IsIconic")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool NativeIsIconic(IntPtr window);
     private double videoRatio = 16d / 9;
     private readonly Windows.UI.ViewManagement.UISettings motionSettings = new();
     private DateTimeOffset lastPlayerInput = DateTimeOffset.UtcNow;
@@ -163,14 +170,14 @@ public sealed partial class MainWindow
         RefreshCaptions();
         PlayPauseButton.Content = new SymbolIcon(playing ? Symbol.Pause : Symbol.Play);
         PlayPauseButton.IsEnabled = loadedCurrent;
+        PipPlayPauseButton.IsEnabled = loadedCurrent;
+        PipPlayPauseButton.Content = new FontIcon { Glyph = playing ? "\uE769" : "\uE768", FontSize = 14 };
+        PipSoundButton.Content = new FontIcon { Glyph = media.IsMuted || media.Volume == 0 ? "\uE74F" : "\uE767", FontSize = 14 };
         PreviousButton.Visibility = NextButton.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 560 ? Visibility.Collapsed : Visibility.Visible;
         PlayerSpeed.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 450 ? Visibility.Collapsed : Visibility.Visible;
         PlayerQuality.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 430 ? Visibility.Collapsed : Visibility.Visible;
         SeekBackwardButton.Visibility = SeekForwardButton.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 480 ? Visibility.Collapsed : Visibility.Visible;
         SoundButton.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
-        PipMuteButton.Visibility = isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
-        PlaybackButtons.HorizontalAlignment = isPictureInPicture ? HorizontalAlignment.Center : HorizontalAlignment.Left;
-        PipMuteButton.Content = new SymbolIcon(media.IsMuted || media.Volume == 0 ? Symbol.Mute : Symbol.Volume);
         FullscreenButton.Visibility = MorePlaybackButton.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
         PipButton.Visibility = isPictureInPicture || VideoSurface.ActualWidth < 400 ? Visibility.Collapsed : Visibility.Visible;
         VideoPresentationTitle.FontSize = isPictureInPicture ? 12 : 18;
@@ -182,19 +189,23 @@ public sealed partial class MainWindow
         {
             PlayerTimeline.Maximum = Math.Max(1, duration);
             PlayerTimeline.Value = Math.Clamp(session.Position.TotalSeconds, 0, PlayerTimeline.Maximum);
+            PipTimeline.Maximum = PlayerTimeline.Maximum;
+            PipTimeline.Value = PlayerTimeline.Value;
         }
         PlayerTimeline.IsEnabled = loadedCurrent && session.CanSeek && duration > 0;
+        PipTimeline.IsEnabled = PlayerTimeline.IsEnabled;
         PlayerVolume.Value = media.Volume * 100;
         PlayerSpeed.SelectedIndex = Array.IndexOf(new[] { 0.5, 0.75, 1, 1.25, 1.5, 2 }, preferences.Speed);
         syncingPlayer = false;
         PlayerTime.Text = $"{PlaybackMath.Time(seeking ? PlayerTimeline.Value : session.Position.TotalSeconds)} / {PlaybackMath.Time(duration)}";
+        PipTime.Text = PlaybackMath.Time(seeking ? PlayerTimeline.Value : session.Position.TotalSeconds);
         ToolTipService.SetToolTip(PlayerQuality, $"Playing at {session.NaturalVideoWidth} × {session.NaturalVideoHeight}");
         if (!holdingPlayer && !playerMenuOpen && !seeking && DateTimeOffset.UtcNow - lastPlayerInput > TimeSpan.FromSeconds(3))
         {
             SetControlsVisible(false);
         }
 
-        var awake = playing && PlayerPanel.Visibility == Visibility.Visible;
+        var awake = playing && PlayerPanel.Visibility == Visibility.Visible && !NativeIsIconic(WinRT.Interop.WindowNative.GetWindowHandle(this));
         if (awake != keepingDisplayAwake)
         {
             try { if (awake) displayRequest.RequestActive(); else displayRequest.RequestRelease(); keepingDisplayAwake = awake; } catch (Exception) { }
@@ -223,12 +234,15 @@ public sealed partial class MainWindow
     private void PlayerControlsGettingFocus(UIElement sender, GettingFocusEventArgs args) => ShowPlayerControls();
     private void SetControlsVisible(bool visible)
     {
+        PlayerControls.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
+        PipControls.Visibility = isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
         FullscreenHeading.Visibility = isFullscreen || isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
         PlayerControls.IsHitTestVisible = visible;
+        PipControls.IsHitTestVisible = visible;
         FullscreenHeading.IsHitTestVisible = visible;
         if (controlsVisible == visible) return;
         controlsVisible = visible;
-        foreach (var element in new UIElement[] { PlayerControls, FullscreenHeading })
+        foreach (var element in new UIElement[] { PlayerControls, PipControls, FullscreenHeading })
         {
             var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(element);
             if (!motionSettings.AnimationsEnabled) { visual.StopAnimation("Opacity"); visual.Opacity = visible ? 1 : 0; continue; }
@@ -244,6 +258,7 @@ public sealed partial class MainWindow
         if (session.NaturalVideoWidth > 0 && session.NaturalVideoHeight > 0)
             videoRatio = (double)session.NaturalVideoWidth / session.NaturalVideoHeight;
         UpdateVideoSize();
+        ResizePictureInPicture();
     }
     private void VideoSlotSizeChanged(object sender, SizeChangedEventArgs args) => UpdateVideoSize();
     private void UpdateVideoSize()
@@ -288,7 +303,7 @@ public sealed partial class MainWindow
     {
         for (var node = args.OriginalSource as DependencyObject; node is not null; node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
         {
-            if (ReferenceEquals(node, PlayerControls) || ReferenceEquals(node, FullscreenHeading)) return;
+            if (ReferenceEquals(node, PlayerControls) || ReferenceEquals(node, PipControls) || ReferenceEquals(node, FullscreenHeading)) return;
             if (ReferenceEquals(node, VideoSurface)) { SetFullscreen(!isFullscreen); args.Handled = true; return; }
         }
     }
@@ -305,6 +320,30 @@ public sealed partial class MainWindow
         return true;
     }
     private void TogglePictureInPicture(object sender, RoutedEventArgs args) => SetPictureInPicture(!isPictureInPicture);
+    private void PipTimelineChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs args)
+    {
+        if (!ready || syncingPlayer || source is null) return;
+        PlayerTimeline.Value = args.NewValue;
+        ShowPlayerControls();
+    }
+    private void MinimizePictureInPicture(object sender, RoutedEventArgs args)
+    {
+        if (!isPictureInPicture || closed) return;
+        SetControlsVisible(false);
+        NativeShowWindow(WinRT.Interop.WindowNative.GetWindowHandle(this), 6); // SW_MINIMIZE: restore from the taskbar.
+        RefreshPlayerControls();
+    }
+    private void ResizePictureInPicture()
+    {
+        if (!isPictureInPicture || closed) return;
+        if (NativeIsIconic(WinRT.Interop.WindowNative.GetWindowHandle(this))) return;
+        var scale = Root.XamlRoot?.RasterizationScale ?? 1;
+        if (Math.Abs(videoRatio - pipSizedRatio) < 0.001 && Math.Abs(scale - pipSizedScale) < 0.001) return;
+        var workArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
+        var size = PlaybackMath.PipSize(videoRatio, Math.Min(420, workArea.Width / scale * 0.8), Math.Min(420, workArea.Height / scale * 0.8));
+        pipSizedRatio = videoRatio; pipSizedScale = scale;
+        AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(Math.Max(1, (int)Math.Round(size.Width * scale)), Math.Max(1, (int)Math.Round(size.Height * scale))));
+    }
     private void ReturnToWindow(object sender, RoutedEventArgs args)
     {
         if (isPictureInPicture) SetPictureInPicture(false); else SetFullscreen(false);
@@ -312,6 +351,7 @@ public sealed partial class MainWindow
     private void SetPictureInPicture(bool value)
     {
         if (closed || value == isPictureInPicture || value && (current is null || PlayerPanel.Visibility != Visibility.Visible)) return;
+        holdingPlayer = playerMenuOpen = false;
         if (value)
         {
             if (isFullscreen) SetFullscreen(false);
@@ -330,6 +370,8 @@ public sealed partial class MainWindow
             Navigation.Visibility = AppTitleBar.Visibility = Visibility.Collapsed;
             Root.RowDefinitions[0].Height = new GridLength(0);
             isPictureInPicture = true;
+            pipSizedRatio = pipSizedScale = 0;
+            ResizePictureInPicture();
             SetTitleBar(VideoPresentationTitle);
         }
         else
@@ -346,6 +388,11 @@ public sealed partial class MainWindow
             SetTitleBar(AppTitleBar);
         }
         UpdateTitleBar();
+        PipMinimizeButton.Visibility = isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
+        PresentationReturnButton.Content = isPictureInPicture ? new FontIcon { Glyph = "\uE8A7", FontSize = 12 } : "Return to app";
+        PresentationReturnButton.MinWidth = PresentationReturnButton.MinHeight = 0;
+        PresentationReturnButton.Padding = new Thickness(isPictureInPicture ? 4 : 8);
+        PresentationReturnButton.Width = PresentationReturnButton.Height = isPictureInPicture ? 26 : double.NaN;
         UpdateVideoSize();
         RefreshPlayerControls();
         ShowPlayerControls();

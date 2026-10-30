@@ -46,7 +46,11 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
         AppWindow.Changed += (_, _) => UpdateTitleBar();
         Root.ActualThemeChanged += (_, _) => UpdateTitleBar();
-        Activated += (_, e) => TitleBarContent.Opacity = e.WindowActivationState == WindowActivationState.Deactivated ? 0.65 : 1;
+        Activated += (_, e) =>
+        {
+            TitleBarContent.Opacity = e.WindowActivationState == WindowActivationState.Deactivated ? 0.65 : 1;
+            if (e.WindowActivationState != WindowActivationState.Deactivated) ResizePictureInPicture();
+        };
         PlayerPanel.SizeChanged += (_, _) => UpdateVideoSize();
         Root.SizeChanged += (_, e) =>
         {
@@ -485,7 +489,8 @@ public sealed partial class MainWindow : Window
         var titleBar = AppWindow.TitleBar;
         var scale = Root.XamlRoot?.RasterizationScale ?? 1;
         AppTitleBar.Padding = new Thickness(Math.Max(16, titleBar.LeftInset / scale), 0, titleBar.RightInset / scale, 0);
-        FullscreenHeading.Padding = isPictureInPicture ? new Thickness(8, 4, Math.Max(8, titleBar.RightInset / scale), 4) : new Thickness(16);
+        FullscreenHeading.Padding = isPictureInPicture ? new Thickness(6, 2, Math.Max(6, titleBar.RightInset / scale), 2) : new Thickness(16);
+        ResizePictureInPicture();
         titleBar.ButtonForegroundColor = isPictureInPicture || Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
         titleBar.ButtonInactiveForegroundColor = isPictureInPicture || Root.ActualTheme == ElementTheme.Dark
             ? Windows.UI.Color.FromArgb(153, 255, 255, 255) : Windows.UI.Color.FromArgb(153, 0, 0, 0);

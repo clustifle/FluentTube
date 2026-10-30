@@ -145,3 +145,11 @@ try
 }
 finally { File.Delete(takeoutZip); }
 Console.WriteLine("Passed Takeout CSV/ZIP, Unicode, quoting, validation, duplicate accounting, and non-destructive merge checks.");
+foreach (var ratio in new[] { 16d / 9, 9d / 16, 1d, 21d / 9, 9d / 21 })
+{
+    var pip = PlaybackMath.PipSize(ratio);
+    if (pip.Width <= 0 || pip.Width > 420 || pip.Height <= 0 || pip.Height > 420 || Math.Abs(pip.Width / pip.Height - ratio) > 0.000001) throw new Exception("PiP must preserve the source aspect ratio within bounds.");
+}
+var smallPip = PlaybackMath.PipSize(1, 150, 90);
+if (smallPip.Width != 90 || smallPip.Height != 90 || PlaybackMath.PipSize(double.NaN).Height != 180) throw new Exception("PiP screen bounds or unknown-ratio fallback failed.");
+Console.WriteLine("Passed PiP portrait, square, widescreen, ultrawide, and small-display aspect checks.");

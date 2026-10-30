@@ -118,6 +118,6 @@ public sealed partial class MainWindow
         CaptionText.Text = Captions.At(captionCues, media.PlaybackSession.Position.TotalSeconds);
         CaptionOverlay.Visibility = CaptionText.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         CaptionText.FontSize = isPictureInPicture ? 14 : 18;
-        CaptionOverlay.Margin = new Thickness(16, 0, 16, controlsVisible ? PlayerControls.ActualHeight + 28 : 24);
+        CaptionOverlay.Margin = new Thickness(12, 0, 12, controlsVisible ? (isPictureInPicture ? PipControls.ActualHeight + 14 : PlayerControls.ActualHeight + 28) : 14);
     }
 }
