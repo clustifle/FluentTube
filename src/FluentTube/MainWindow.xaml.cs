@@ -25,7 +25,7 @@ public sealed partial class MainWindow : Window
         SetTitleBar(AppTitleBar);
         AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
-        AppWindow.TitleBar.LayoutMetricsChanged += (_, _) => UpdateTitleBar();
+        AppWindow.Changed += (_, _) => UpdateTitleBar();
         Root.ActualThemeChanged += (_, _) => UpdateTitleBar();
         Activated += (_, e) => TitleBarContent.Opacity = e.WindowActivationState == WindowActivationState.Deactivated ? 0.65 : 1;
         Root.SizeChanged += (_, e) =>
