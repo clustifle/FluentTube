@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>FluentTube player</title>
+  <style>html,body,#player{width:100%;height:100%;margin:0;background:#000;overflow:hidden}</style>
+</head>
+<body>
+  <div id="player"></div>
+  <script>
+    const id = new URLSearchParams(location.search).get('v');
+    function report(kind, code) { window.chrome?.webview?.postMessage(JSON.stringify({kind, code})); }
+    function onYouTubeIframeAPIReady() {
+      if (!/^[A-Za-z0-9_-]{11}$/.test(id || '')) return;
+      new YT.Player('player', {
+        videoId: id,
+        playerVars: { playsinline: 1, origin: location.origin },
+        events: {
+          onReady: () => report('ready', 0),
+          onError: e => report('error', e.data),
+          onStateChange: e => { if (e.data === 1) report('playing', 0); }
+        }
+      });
+    }
+  </script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>

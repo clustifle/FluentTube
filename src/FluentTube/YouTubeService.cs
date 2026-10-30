@@ -1,11 +1,11 @@
 using System.Net;
-using System.Net.Http;
+using System.Diagnostics;
+using System.IO;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 namespace FluentTube;
 internal static partial class YouTubeService
 {
-    private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(25) };
     [GeneratedRegex("^[A-Za-z0-9_-]{11}$")]
     private static partial Regex VideoIdPattern();
     internal static string? ParseVideoId(string input)
@@ -23,24 +23,51 @@ internal static partial class YouTubeService
         }
         return id is not null && VideoIdPattern().IsMatch(id) ? id : null;
     }
-    internal static async Task<List<Video>> Fetch(string key, string? query, CancellationToken cancellation)
+    internal static List<Video> ParseSearchResults(string jsonText)
     {
-        var endpoint = string.IsNullOrWhiteSpace(query)
-            ? "videos?part=snippet&chart=mostPopular&maxResults=24"
-            : $"search?part=snippet&type=video&maxResults=24&q={Uri.EscapeDataString(query)}";
-        using var response = await Client.GetAsync($"https://www.googleapis.com/youtube/v3/{endpoint}&key={Uri.EscapeDataString(key)}", cancellation);
-        if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException(response.StatusCode == HttpStatusCode.Forbidden
-                ? "YouTube refused this request. Check that YouTube Data API v3 is enabled, your key restrictions allow this app, and quota is available."
-                : $"YouTube returned {(int)response.StatusCode}. Check your API key and try again.");
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellation));
-        return json.RootElement.GetProperty("items").EnumerateArray().Select(item =>
+        using var json = JsonDocument.Parse(jsonText);
+        if (!json.RootElement.TryGetProperty("entries", out var entries) || entries.ValueKind != JsonValueKind.Array) return [];
+        var videos = new List<Video>();
+        foreach (var item in entries.EnumerateArray())
         {
-            var id = item.GetProperty("id");
-            var snippet = item.GetProperty("snippet");
-            return new Video(id.ValueKind == JsonValueKind.String ? id.GetString()! : id.GetProperty("videoId").GetString()!,
-                WebUtility.HtmlDecode(snippet.GetProperty("title").GetString() ?? "Untitled"),
-                WebUtility.HtmlDecode(snippet.GetProperty("channelTitle").GetString() ?? "YouTube"));
-        }).ToList();
+            if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("id", out var idValue)) continue;
+            var id = idValue.ValueKind == JsonValueKind.String ? idValue.GetString() : null;
+            if (id is null || !VideoIdPattern().IsMatch(id)) continue;
+            string Text(string name, string fallback) => item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString()! : fallback;
+            videos.Add(new Video(id, WebUtility.HtmlDecode(Text("title", "YouTube video")), Text("channel", Text("uploader", "YouTube"))));
+        }
+        return videos.DistinctBy(v => v.Id).ToList();
+    }
+    internal static ProcessStartInfo SearchProcess(string executable, string query)
+    {
+        var start = new ProcessStartInfo(executable) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8 };
+        foreach (var arg in new[] { "--ignore-config", "--no-plugin-dirs", "--flat-playlist", "--skip-download", "--dump-single-json", "--no-warnings", "--socket-timeout", "15", "--retries", "1", "--", $"ytsearch24:{query}" }) start.ArgumentList.Add(arg);
+        return start;
+    }
+    internal static async Task<List<Video>> Fetch(string query, CancellationToken cancellation)
+    {
+        var executable = Path.Combine(AppContext.BaseDirectory, "Tools", "yt-dlp.exe");
+        if (!File.Exists(executable)) throw new InvalidOperationException("The search helper is missing. Extract the entire FluentTube download, including its Tools folder.");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
+        deadline.CancelAfter(TimeSpan.FromSeconds(60));
+        using var process = new Process { StartInfo = SearchProcess(executable, query) };
+        process.Start();
+        var output = process.StandardOutput.ReadToEndAsync();
+        var errors = process.StandardError.ReadToEndAsync();
+        try { await process.WaitForExitAsync(deadline.Token); }
+        catch (OperationCanceledException)
+        {
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+            await process.WaitForExitAsync();
+            await Task.WhenAll(output, errors);
+            if (cancellation.IsCancellationRequested) throw;
+            throw new InvalidOperationException("Search timed out. Check your connection and try again.");
+        }
+        var result = await output;
+        var error = await errors;
+        if (process.ExitCode != 0) throw new InvalidOperationException(error.Contains("Sign in", StringComparison.OrdinalIgnoreCase) || error.Contains("bot", StringComparison.OrdinalIgnoreCase)
+            ? "YouTube temporarily blocked search. Try again later, or paste a video link to watch."
+            : "Search could not reach YouTube. Try again, or install a newer FluentTube build if the problem persists.");
+        return ParseSearchResults(result);
     }
 }

@@ -7,7 +7,6 @@ using Windows.System;
 namespace FluentTube;
 public sealed partial class MainWindow : Window
 {
-    private string key = "";
     private Video? current;
     private List<Video> saved = [];
     private CancellationTokenSource? request;
@@ -20,13 +19,11 @@ public sealed partial class MainWindow : Window
         Root.Loaded += Initialize;
         Closed += (_, _) => { request?.Cancel(); Player.Close(); };
     }
-    private async void Initialize(object sender, RoutedEventArgs args)
+    private void Initialize(object sender, RoutedEventArgs args)
     {
         saved = LibraryStore.LoadVideos();
-        try { key = await LibraryStore.LoadKey(); ApiKey.Password = key; }
-        catch (Exception) { ShowMessage("Could not read your saved key. Enter it again in Settings.", true); }
         ready = true;
-        if (key.Length > 0) await LoadVideos(null);
+        ShowMessage("Search YouTube or paste a video link. No API key or Google Cloud account needed.");
     }
     private void ShowMessage(string message, bool error = false)
     {
@@ -62,12 +59,12 @@ public sealed partial class MainWindow : Window
     {
         ShowPanel("browse");
         PageTitle.Text = query is null ? "Discover" : $"Results for “{query}”";
-        if (key.Length == 0)
+        if (string.IsNullOrWhiteSpace(query))
         {
             Videos.ItemsSource = null;
-            EmptyState.Text = "Paste a YouTube video link above to start watching. Add an API key in Settings for search and discovery.";
+            EmptyState.Text = "Search for a topic, creator, or song above. You can also paste a YouTube video link.";
             EmptyState.Visibility = Visibility.Visible;
-            ShowMessage("Add a YouTube Data API v3 key in Settings to search. You can open video links without a key.");
+            ShowMessage("Search is ready. No API key or billing setup needed.");
             return;
         }
         request?.Cancel();
@@ -76,7 +73,7 @@ public sealed partial class MainWindow : Window
         ShowMessage("Loading videos…");
         try
         {
-            var videos = await YouTubeService.Fetch(key, query, active.Token);
+            var videos = await YouTubeService.Fetch(query, active.Token);
             if (active.IsCancellationRequested) return;
             Videos.ItemsSource = videos;
             EmptyState.Text = "No videos found. Try another search.";
@@ -98,6 +95,7 @@ public sealed partial class MainWindow : Window
     private async void VideoClicked(object sender, ItemClickEventArgs args) => await Play((Video)args.ClickedItem);
     private async Task Play(Video video)
     {
+        if (YouTubeService.ParseVideoId(video.Id) != video.Id) { ShowMessage("This saved video link is invalid.", true); return; }
         request?.Cancel();
         current = video;
         VideoTitle.Text = video.Title;
@@ -108,17 +106,34 @@ public sealed partial class MainWindow : Window
             {
                 var environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, Path.Combine(LibraryStore.Folder, "WebView2"), null);
                 await Player.EnsureCoreWebView2Async(environment);
+                Player.CoreWebView2!.SetVirtualHostNameToFolderMapping("clustifle.github.io", Path.Combine(AppContext.BaseDirectory, "Assets", "Player"), CoreWebView2HostResourceAccessKind.DenyCors);
+                Player.CoreWebView2.WebMessageReceived += (_, e) =>
+                {
+                    if (!e.Source.StartsWith("https://clustifle.github.io/index.html", StringComparison.Ordinal)) return;
+                    try
+                    {
+                        using var message = System.Text.Json.JsonDocument.Parse(e.TryGetWebMessageAsString());
+                        var kind = message.RootElement.GetProperty("kind").GetString();
+                        if (kind == "ready") ShowMessage("YouTube player ready. Press Play to watch.");
+                        else if (kind == "playing") ShowMessage("Playing on YouTube");
+                        else if (kind == "error")
+                        {
+                            var code = message.RootElement.GetProperty("code").GetInt32();
+                            ShowMessage(code == 153 ? "YouTube could not verify the player identity (153). Choose Open on YouTube to continue."
+                                : $"YouTube could not play this video (error {code}). It may restrict embedding. Choose Open on YouTube.", true);
+                        }
+                    }
+                    catch (Exception) { /* Ignore messages outside the player status protocol. */ }
+                };
                 Player.CoreWebView2!.NewWindowRequested += async (_, e) =>
                 {
                     e.Handled = true;
                     if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri) && uri.Scheme == "https") await Launcher.LaunchUriAsync(uri);
                 };
             }
-            // Identify the embedding application with an HTTPS Referer, as YouTube requires.
-            var message = Player.CoreWebView2.Environment.CreateWebResourceRequest(
-                $"https://www.youtube.com/embed/{video.Id}?playsinline=1", "GET", null,
-                "Referer: https://github.com/clustifle/FluentTube\r\n");
-            Player.CoreWebView2.NavigateWithWebResourceRequest(message);
+            // Load a real enclosing HTTPS document so iframe and player requests retain
+            // a consistent browser-generated Referer and origin (YouTube error 153).
+            Player.CoreWebView2.Navigate($"https://clustifle.github.io/index.html?v={video.Id}");
             ShowMessage("YouTube player • If this video cannot be embedded, choose Open on YouTube.");
         }
         catch (Exception) { ShowMessage("Could not initialize playback. Install Microsoft Edge WebView2 Runtime, or choose Open on YouTube.", true); }
@@ -135,9 +150,4 @@ public sealed partial class MainWindow : Window
         if (current is not null) await Launcher.LaunchUriAsync(new Uri($"https://www.youtube.com/watch?v={current.Id}"));
     }
     private void BackToVideos(object sender, RoutedEventArgs args) => ShowPanel("browse");
-    private async void SaveSettings(object sender, RoutedEventArgs args)
-    {
-        try { await LibraryStore.SaveKey(ApiKey.Password.Trim()); key = ApiKey.Password.Trim(); ShowMessage("Settings saved. Choose Discover to load videos."); }
-        catch (Exception) { ShowMessage("Could not save the key securely. Please try again.", true); }
-    }
 }

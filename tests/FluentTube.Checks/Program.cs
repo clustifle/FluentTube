@@ -18,3 +18,11 @@ var cases = new (string Input, string? Expected)[]
 foreach (var (input, expected) in cases)
     if (YouTubeService.ParseVideoId(input) != expected) throw new Exception($"URL parsing failed: {input}");
 Console.WriteLine($"Passed {cases.Length} video URL and untrusted-input checks.");
+var parsed = YouTubeService.ParseSearchResults("""
+{"entries":[null,{"id":"bad"},{"id":"dQw4w9WgXcQ","title":"A &amp; B","channel":"Creator"},{"id":"dQw4w9WgXcQ"},{"id":"jNQXAC9IVRw","uploader":"Uploader"}]}
+""");
+if (parsed.Count != 2 || parsed[0].Title != "A & B" || parsed[1].Channel != "Uploader") throw new Exception("Search metadata filtering failed.");
+var hostileQuery = "music \" --exec calc.exe & echo test";
+var start = YouTubeService.SearchProcess("yt-dlp.exe", hostileQuery);
+if (start.UseShellExecute || !start.CreateNoWindow || start.ArgumentList.Last() != "ytsearch24:" + hostileQuery || start.ArgumentList[^2] != "--") throw new Exception("Search arguments must remain a single literal query.");
+Console.WriteLine("Passed metadata filtering and literal process-argument checks.");
