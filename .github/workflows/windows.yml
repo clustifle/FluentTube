@@ -17,6 +17,8 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Check playback, library, and import logic
         run: dotnet run --project tests/FluentTube.Checks -c Release
+      - name: Check native PiP resize handling
+        run: dotnet run --project tests/FluentTube.PlaybackChecks -c Release -- --pip-resize
       - name: Fetch verified search helper
         run: ./scripts/Get-SearchHelper.ps1
       - name: Publish native Windows x64 app

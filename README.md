@@ -62,4 +62,6 @@ GitHub Actions checks URL parsing, metadata, literal process arguments, and stre
 
 Checks also cover Shorts classification and page bounds, portrait 1080p manifests, and VTT/SRT timing, overlapping cues, and caption URL validation. An optional Windows integration check exercises live Shorts pages, native playback, seeking, speed changes, and available portrait 1080p streams: `dotnet run --project tests/FluentTube.PlaybackChecks -c Release -- --shorts '@YouTube'`.
 
+The native PiP resize callback is checked using a hidden Win32 window without desktop input: `dotnet run --project tests/FluentTube.PlaybackChecks -c Release -- --pip-resize`. This runs in GitHub Actions as well as the geometry and shutdown checks.
+
 Planned: account OAuth/sync, ARM64, and signed MSIX distribution. FluentTube is independent and is not affiliated with YouTube, Google, or VLC.

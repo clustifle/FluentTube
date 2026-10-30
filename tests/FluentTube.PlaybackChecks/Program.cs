@@ -3,6 +3,7 @@ using Windows.Media.Playback;
 using Windows.Storage;
 using System.Text.Json;
 using FluentTube;
+if (args.Length == 1 && args[0] == "--pip-resize") { PipSizingChecks.Run(); return; }
 
 if (args.Length == 2 && args[0] == "--shorts")
 {

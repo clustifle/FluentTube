@@ -10,6 +10,7 @@ RC1 is a release candidate, not a declaration that these manual gates passed.
 - [x] Live Shorts pages are distinct; portrait combined and available 1080p adaptive streams play.
 - [x] Executable, XAML resources, icon, runtimes, helpers, installation instructions, and notices are packaged.
 - [x] New icon preview inspected at small sizes on light and dark backgrounds.
+- [x] Native PiP resize callback tested on a hidden Win32 window: eight edges, aspect lock, enter/exit events, normal-window passthrough, and unhooking.
 
 These are development-machine and media-engine harness checks. They do not launch or validate the full WinUI window interactions. ZIP contents and SHA-256 were inspected locally; the tagged Actions run provides CI evidence separately.
 
