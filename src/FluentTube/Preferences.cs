@@ -9,6 +9,9 @@ internal sealed class Preferences
     public bool Loop { get; set; }
     public bool CompactCards { get; set; }
     public bool StartWithSaved { get; set; }
+    public bool PrepareOnHover { get; set; } = true;
+    public bool RememberPosition { get; set; } = true;
+    public bool AutoPlayNext { get; set; }
     public double Volume { get; set; } = 0.8;
     public double Speed { get; set; } = 1;
     public static Preferences Load()

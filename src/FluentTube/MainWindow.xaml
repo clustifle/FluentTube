@@ -31,7 +31,7 @@
                 </Border>
                 <GridView x:Name="Videos" IsItemClickEnabled="True" ItemClick="VideoClicked" SelectionMode="None">
                   <GridView.ItemTemplate><DataTemplate x:DataType="local:Video">
-                    <Border x:Name="VideoCard" Loaded="VideoCardLoaded" Width="290" Margin="0,0,12,16">
+                    <Border x:Name="VideoCard" Loaded="VideoCardLoaded" PointerEntered="PrepareVideo" PointerExited="CancelPreparation" Width="290" Margin="0,0,12,16">
                       <StackPanel Spacing="10">
                         <Grid Height="163" Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="4">
                           <SymbolIcon Symbol="Video" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
@@ -54,11 +54,26 @@
                 <Button Click="BackToVideos" AutomationProperties.Name="Back to videos" ToolTipService.ToolTip="Back"><SymbolIcon Symbol="Back"/></Button>
                 <TextBlock x:Name="VideoTitle" Grid.Column="1" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" MaxLines="2" VerticalAlignment="Center"/>
               </Grid>
-              <Border Grid.Row="1" Background="Black"><MediaPlayerElement x:Name="Player" MinHeight="180" AreTransportControlsEnabled="True" AutoPlay="False"/></Border>
+              <Grid Grid.Row="1" Background="Black">
+                <MediaPlayerElement x:Name="Player" MinHeight="180" AreTransportControlsEnabled="True" AutoPlay="False">
+                  <MediaPlayerElement.TransportControls><MediaTransportControls IsPlaybackRateButtonVisible="True" IsPlaybackRateEnabled="True"/></MediaPlayerElement.TransportControls>
+                </MediaPlayerElement>
+                <StackPanel x:Name="LoadingPlayback" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" IsHitTestVisible="False"><ProgressRing IsActive="True" Width="32" Height="32"/><TextBlock Text="Opening video…" Foreground="White"/></StackPanel>
+              </Grid>
               <CommandBar Grid.Row="2" Background="Transparent" DefaultLabelPosition="Right" HorizontalAlignment="Left" IsOpen="False">
+                <AppBarButton x:Name="PreviousButton" Icon="Previous" Label="Previous" Click="PreviousVideo" IsEnabled="False"/>
+                <AppBarButton Label="Back 10 s" Click="SeekBackward"><AppBarButton.Icon><FontIcon Glyph="&#xE7A7;"/></AppBarButton.Icon></AppBarButton>
+                <AppBarButton Label="Forward 10 s" Click="SeekForward"><AppBarButton.Icon><FontIcon Glyph="&#xE7A6;"/></AppBarButton.Icon></AppBarButton>
+                <AppBarButton x:Name="NextButton" Icon="Next" Label="Next" Click="NextVideo" IsEnabled="False"/>
+                <AppBarSeparator/>
                 <AppBarButton Icon="Save" Label="Save for later" Click="SaveVideo"/>
                 <AppBarButton Icon="OpenFile" Label="Open file" Click="ImportVideo"/>
                 <AppBarButton Icon="Go" Label="Open on YouTube" Click="OpenInBrowser"/>
+                <CommandBar.SecondaryCommands>
+                  <AppBarButton Label="Retry playback" Icon="Refresh" Click="RetryPlayback"/>
+                  <AppBarToggleButton x:Name="RepeatButton" Label="Repeat" Icon="RepeatAll" Click="ToggleRepeat"/>
+                  <AppBarButton Label="Keyboard shortcuts" Click="ShowShortcuts"/>
+                </CommandBar.SecondaryCommands>
               </CommandBar>
             </Grid>
             <ScrollViewer x:Name="SettingsPanel" Visibility="Collapsed" HorizontalScrollBarVisibility="Disabled">
@@ -75,13 +90,17 @@
                   <StackPanel Spacing="20">
                     <ToggleSwitch x:Name="AutoplayChoice" Header="Play automatically when a video opens" IsOn="True" Toggled="SettingsChanged"/>
                     <ToggleSwitch x:Name="LoopChoice" Header="Repeat current video" Toggled="SettingsChanged"/>
+                    <ToggleSwitch x:Name="ResumeChoice" Header="Remember playback position" IsOn="True" Toggled="SettingsChanged"/>
+                    <ToggleSwitch x:Name="NextChoice" Header="Play next video automatically" Toggled="SettingsChanged"/>
+                    <ToggleSwitch x:Name="PrepareChoice" Header="Prepare videos before opening" IsOn="True" Toggled="SettingsChanged"/>
+                    <TextBlock Text="Prepare a hovered video and, when autoplay next is enabled, the next video in the list. This uses network data before playback. Stream links stay in memory for up to ten minutes." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
                     <Slider x:Name="VolumeChoice" Header="Default volume" Minimum="0" Maximum="100" Value="80" StepFrequency="5" ValueChanged="SettingsChanged" MinWidth="260"/>
                     <ComboBox x:Name="SpeedChoice" Header="Playback speed" SelectedIndex="2" SelectionChanged="SettingsChanged" MinWidth="220"><x:String>0.5×</x:String><x:String>0.75×</x:String><x:String>1×</x:String><x:String>1.25×</x:String><x:String>1.5×</x:String><x:String>2×</x:String></ComboBox>
                   </StackPanel>
                 </Expander>
                 <Expander Header="Startup" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"><ToggleSwitch x:Name="StartupChoice" Header="Open Watch later at startup" Toggled="SettingsChanged"/></Expander>
                 <Expander Header="About FluentTube" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                  <StackPanel Spacing="12"><TextBlock Text="FluentTube 0.5" FontWeight="SemiBold"/><TextBlock Text="WinUI 3 and .NET 10"/><TextBlock Text="Search and public video playback use yt-dlp. No API key is required. Video availability and supported codecs depend on YouTube and Windows." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
+                  <StackPanel Spacing="12"><TextBlock Text="FluentTube 0.6" FontWeight="SemiBold"/><TextBlock Text="WinUI 3 and .NET 10"/><TextBlock Text="Search and public video playback use yt-dlp. No API key is required. Video availability and supported codecs depend on YouTube and Windows." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
                 </Expander>
                 <Button Content="Reset preferences" Click="ResetSettings" Margin="0,8,0,0"/>
               </StackPanel>

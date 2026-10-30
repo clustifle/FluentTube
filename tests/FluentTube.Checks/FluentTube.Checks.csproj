@@ -1,4 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
-  <ItemGroup><Compile Include="../../src/FluentTube/YouTubeService.cs" Link="YouTubeService.cs"/><Compile Include="../../src/FluentTube/Video.cs" Link="Video.cs"/></ItemGroup>
+  <ItemGroup><Compile Include="../../src/FluentTube/YouTubeService.cs" Link="YouTubeService.cs"/><Compile Include="../../src/FluentTube/Video.cs" Link="Video.cs"/><Compile Include="../../src/FluentTube/StreamCache.cs" Link="StreamCache.cs"/><Compile Include="../../src/FluentTube/PlaybackMath.cs" Link="PlaybackMath.cs"/></ItemGroup>
 </Project>

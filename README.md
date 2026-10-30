@@ -1,6 +1,6 @@
 # FluentTube
 
-A Windows 11 YouTube client built with **C#, .NET 10, and WinUI 3**. Version 0.5 uses a conventional Fluent layout: an integrated WinUI title bar with native Windows caption buttons, Mica backdrop, NavigationView, search box, video grid, native media controls, and Settings expanders. The title bar shares the window's Mica material, follows the app theme, and reserves space for caption buttons at the current display scale. Native playback, key-free search, local imports, and saved preferences are preserved. This is an early app, not a finished YouTube replacement.
+A Windows 11 YouTube client built with **C#, .NET 10, and WinUI 3**. Version 0.6 uses a conventional Fluent layout: an integrated WinUI title bar with native Windows caption buttons, Mica backdrop, NavigationView, search box, video grid, native media controls, and Settings expanders. The title bar shares the window's Mica material, follows the app theme, and reserves space for caption buttons at the current display scale. Native playback, key-free search, local imports, and saved preferences are preserved. This is an early app, not a finished YouTube replacement.
 
 ## Download
 
@@ -13,11 +13,13 @@ Requires Windows 11 x64. .NET and Windows App SDK runtimes are bundled. Builds a
 - Type a topic, creator, or song to search. No Google Cloud project, API key, billing account, or sign-in needed.
 - Paste a YouTube watch, Shorts, live, or youtu.be URL to open it in the native Windows player. yt-dlp resolves a combined audio/video stream; quality depends on what YouTube provides in this format (often 360p). Separate high-resolution audio/video merging is not implemented.
 - Choose **Import video** to open a local file. MP4, MKV, WebM, MOV, AVI, WMV, M4V, MP3, and M4A appear in the picker; actual decoding depends on installed Windows codecs. Files are opened in place, not copied or uploaded.
-- Native transport controls provide play/pause, seek, volume, and fullscreen. Settings provide speed, repeat, autoplay, default volume, theme, accent color, compact cards, and startup behavior. Preferences save automatically and can be reset.
+- Native transport controls provide play/pause, seek, volume, playback speed, and full-window video. The player also offers back/forward ten seconds, previous/next in the current result or saved list, repeat, retry with a fresh stream, optional autoplay next, and remembered playback positions. Open the player command bar's overflow menu for keyboard shortcuts.
+- Playback shortcuts: Space/K play or pause, J/L seek ten seconds, M mute, F full window, Escape exit full window, P/N previous/next. Typing and native control interactions retain their normal keys.
+- Stream links are cached in memory for up to ten minutes, capped before their signed expiry; concurrent requests share one extraction. Reopening the current ready source resumes it directly. Hover preparation and optional next-video preparation can hide some of the lookup delay. Turn preparation off in Playback settings to avoid advance network requests. First-time YouTube lookup and media buffering still depend on the network; instant playback is not guaranteed.
 - Save for later keeps video references locally, including imported file paths. Moving or deleting a local file makes its saved reference unavailable.
 - Pass a YouTube URL or absolute local video path as the first command-line argument to open it directly.
 
-YouTube search and stream resolution use unofficial access and may be throttled or break when YouTube changes. Private, age-restricted, DRM-protected, or blocked videos may be unavailable. Direct stream URLs expire and are resolved again when reopening a video. The native player removes the embedded-player error 153 path; it does not remove content restrictions. Open on YouTube is available as a fallback.
+YouTube search and stream resolution use unofficial access and may be throttled or break when YouTube changes. Private, age-restricted, DRM-protected, or blocked videos may be unavailable. Expired stream links are resolved again; failed playback invalidates its cached link, and Retry playback forces a fresh lookup. Ordinary resolution skips unneeded adaptive manifests, with full extraction retried if a combined format cannot be found. The native player removes the embedded-player error 153 path; it does not remove content restrictions. Open on YouTube is available as a fallback.
 
 ## Privacy and dependencies
 

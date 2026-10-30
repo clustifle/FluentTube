@@ -34,3 +34,40 @@ foreach (var invalid in new[] { "file:///C:/video.mp4", "javascript:alert(1)", "
     catch (InvalidOperationException) { }
 }
 Console.WriteLine("Passed native stream metadata and HTTPS-only source checks.");
+var now = DateTimeOffset.UtcNow;
+var releases = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+var calls = 0;
+var cache = new StreamCache<int>(async (_, token) => { Interlocked.Increment(ref calls); return await releases.Task.WaitAsync(token); }, _ => now.AddMinutes(1), clock: () => now);
+using var cancelOne = new CancellationTokenSource();
+var first = cache.Get("video", cancelOne.Token);
+var second = cache.Get("video", CancellationToken.None);
+cancelOne.Cancel();
+try { await first; throw new Exception("Canceled cache caller completed."); } catch (OperationCanceledException) { }
+releases.SetResult(42);
+if (await second != 42 || await cache.Get("video", CancellationToken.None) != 42 || calls != 1) throw new Exception("Shared extraction or warm reuse failed.");
+now = now.AddMinutes(2);
+await cache.Get("video", CancellationToken.None);
+if (calls != 2) throw new Exception("Expired stream was reused.");
+cache.Invalidate("video");
+await cache.Get("video", CancellationToken.None);
+if (calls != 3) throw new Exception("Stream invalidation failed.");
+if (PlaybackMath.Seek(3, -10, 60) != 0 || PlaybackMath.Seek(55, 10, 60) != 60 || PlaybackMath.Resume(20, 60) != 20 || PlaybackMath.Resume(55, 60) != 0) throw new Exception("Seek/resume bounds failed.");
+var expired = YouTubeService.StreamExpiry(new(new Uri("https://example.com/video?expire=1"), "", ""));
+if (expired > DateTimeOffset.UtcNow) throw new Exception("Expired signed URL was cached.");
+Console.WriteLine("Passed shared extraction, caller cancellation, expiry, invalidation, and seek/resume checks.");
+var workerStopped = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+var canceledCache = new StreamCache<int>(async (_, token) =>
+{
+    try { await Task.Delay(Timeout.Infinite, token); return 0; }
+    finally { workerStopped.TrySetResult(true); }
+}, _ => DateTimeOffset.UtcNow.AddMinutes(1));
+using var stop = new CancellationTokenSource();
+var pending = canceledCache.Get("cancel", stop.Token);
+stop.Cancel();
+try { await pending; throw new Exception("Canceled extraction continued."); } catch (OperationCanceledException) { }
+await workerStopped.Task.WaitAsync(TimeSpan.FromSeconds(2));
+var attempts = 0;
+var faultCache = new StreamCache<int>((_, _) => ++attempts == 1 ? Task.FromException<int>(new InvalidOperationException()) : Task.FromResult(7), _ => DateTimeOffset.UtcNow.AddMinutes(1));
+try { await faultCache.Get("retry", CancellationToken.None); throw new Exception("Expected extraction failure."); } catch (InvalidOperationException) { }
+if (await faultCache.Get("retry", CancellationToken.None) != 7) throw new Exception("Faulted extraction could not be retried.");
+Console.WriteLine("Passed abandoned-worker cancellation and failed-extraction retry checks.");

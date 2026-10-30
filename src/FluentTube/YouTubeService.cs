@@ -51,6 +51,21 @@ internal static partial class YouTubeService
         return ParseSearchResults(await Execute(SearchProcess(executable, query), cancellation));
     }
     internal sealed record StreamInfo(Uri Url, string Title, string Quality);
+    private static readonly StreamCache<StreamInfo> Streams = new(ExtractStream, StreamExpiry);
+    internal static DateTimeOffset StreamExpiry(StreamInfo stream)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var until = now.AddMinutes(10);
+        var expiry = stream.Url.Query.TrimStart('?').Split('&').Select(p => p.Split('=', 2)).FirstOrDefault(p => p.Length == 2 && p[0] == "expire");
+        if (expiry is not null && long.TryParse(expiry[1], out var seconds))
+        {
+            try { var signedExpiry = DateTimeOffset.FromUnixTimeSeconds(seconds).AddMinutes(-2); if (signedExpiry < until) until = signedExpiry; }
+            catch (ArgumentOutOfRangeException) { return now; }
+        }
+        return until;
+    }
+    internal static Task<StreamInfo> ResolveStream(string id, CancellationToken cancellation) => Streams.Get(id, cancellation);
+    internal static void InvalidateStream(string id) => Streams.Invalidate(id);
     internal static StreamInfo ParseStream(string jsonText)
     {
         using var json = JsonDocument.Parse(jsonText);
@@ -61,7 +76,7 @@ internal static partial class YouTubeService
         var quality = root.TryGetProperty("height", out var height) && height.TryGetInt32(out var h) ? $"{h}p" : "Available quality";
         return new(uri, title, quality);
     }
-    internal static async Task<StreamInfo> ResolveStream(string id, CancellationToken cancellation)
+    private static async Task<StreamInfo> ExtractStream(string id, CancellationToken cancellation)
     {
         if (!VideoIdPattern().IsMatch(id)) throw new InvalidOperationException("Invalid YouTube video ID.");
         var executable = Path.Combine(AppContext.BaseDirectory, "Tools", "yt-dlp.exe");
@@ -69,8 +84,17 @@ internal static partial class YouTubeService
         if (!File.Exists(executable) || !File.Exists(deno)) throw new InvalidOperationException("The playback helper is missing. Extract the entire app download, including Tools.");
         var start = SearchProcess(executable, "");
         start.ArgumentList.Clear();
-        foreach (var arg in new[] { "--ignore-config", "--no-plugin-dirs", "--no-playlist", "--skip-download", "--dump-single-json", "--js-runtimes", "deno:" + deno, "--socket-timeout", "15", "--retries", "1", "-f", "b[ext=mp4]/b", "--", "https://www.youtube.com/watch?v=" + id }) start.ArgumentList.Add(arg);
-        return ParseStream(await Execute(start, cancellation));
+        foreach (var arg in new[] { "--ignore-config", "--no-plugin-dirs", "--no-playlist", "--skip-download", "--dump-single-json", "--js-runtimes", "deno:" + deno, "--socket-timeout", "15", "--retries", "1", "-f", "b[ext=mp4]/b", "--extractor-args", "youtube:skip=hls,dash,translated_subs", "--", "https://www.youtube.com/watch?v=" + id }) start.ArgumentList.Add(arg);
+        try { return ParseStream(await Execute(start, cancellation)); }
+        catch (InvalidOperationException e) when (e.Message.StartsWith("No combined audio/video", StringComparison.Ordinal))
+        {
+            // Some live streams require manifests. Retry with full extraction
+            // rather than dropping format support to make ordinary opens faster.
+            var option = start.ArgumentList.IndexOf("--extractor-args");
+            start.ArgumentList.RemoveAt(option + 1);
+            start.ArgumentList.RemoveAt(option);
+            return ParseStream(await Execute(start, cancellation));
+        }
     }
     private static async Task<string> Execute(ProcessStartInfo start, CancellationToken cancellation)
     {

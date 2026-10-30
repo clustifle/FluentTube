@@ -2,11 +2,24 @@ using Windows.Media.Core;
 using Windows.Media.Playback;
 using Windows.Storage;
 using System.Text.Json;
+using FluentTube;
 
 // Windows integration check: decode a local file and a freshly resolved public
 // stream through the same MediaPlayer engine used by the WinUI control.
 if (args.Length != 2) throw new ArgumentException("Provide a sample MP4 path and yt-dlp stream metadata JSON path.");
 await Check("local import", MediaSource.CreateFromStorageFile(await StorageFile.GetFileFromPathAsync(Path.GetFullPath(args[0]))));
+if (args[1] == "--resolve")
+{
+    var timer = System.Diagnostics.Stopwatch.StartNew();
+    var first = await YouTubeService.ResolveStream("jNQXAC9IVRw", CancellationToken.None);
+    var cold = timer.Elapsed.TotalSeconds;
+    timer.Restart();
+    var second = await YouTubeService.ResolveStream("jNQXAC9IVRw", CancellationToken.None);
+    Console.WriteLine($"Resolve timing: cold {cold:F2}s; cached {timer.Elapsed.TotalMilliseconds:F2}ms");
+    if (!ReferenceEquals(first, second)) throw new Exception("Stream cache did not reuse the resolved source.");
+    await Check("YouTube native stream", MediaSource.CreateFromUri(second.Url));
+    return;
+}
 using var json = JsonDocument.Parse(await File.ReadAllTextAsync(args[1]));
 await Check("YouTube native stream", MediaSource.CreateFromUri(new Uri(json.RootElement.GetProperty("url").GetString()!)));
 
@@ -25,6 +38,17 @@ static async Task Check(string label, MediaSource source)
         if (media.PlaybackSession.Position <= TimeSpan.Zero || media.PlaybackSession.NaturalVideoWidth == 0)
             throw new Exception($"{label}: media opened but video playback did not advance.");
         Console.WriteLine($"PASS {label}: {media.PlaybackSession.NaturalVideoWidth}x{media.PlaybackSession.NaturalVideoHeight}, position {media.PlaybackSession.Position.TotalSeconds:F1}s");
+        if (media.PlaybackSession.CanSeek)
+        {
+            media.Pause();
+            media.PlaybackSession.Position = TimeSpan.FromSeconds(10);
+            media.PlaybackSession.PlaybackRate = 1.5;
+            await Task.Delay(500);
+            media.Play();
+            await Task.Delay(1000);
+            if (media.PlaybackSession.Position.TotalSeconds < 10) throw new Exception($"{label}: seeking failed.");
+            Console.WriteLine($"PASS {label}: seek and 1.5x playback");
+        }
         media.Pause();
     }
 }
