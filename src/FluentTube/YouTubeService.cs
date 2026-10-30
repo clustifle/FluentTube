@@ -48,9 +48,36 @@ internal static partial class YouTubeService
     {
         var executable = Path.Combine(AppContext.BaseDirectory, "Tools", "yt-dlp.exe");
         if (!File.Exists(executable)) throw new InvalidOperationException("The search helper is missing. Extract the entire FluentTube download, including its Tools folder.");
+        return ParseSearchResults(await Execute(SearchProcess(executable, query), cancellation));
+    }
+    internal sealed record StreamInfo(Uri Url, string Title, string Quality);
+    internal static StreamInfo ParseStream(string jsonText)
+    {
+        using var json = JsonDocument.Parse(jsonText);
+        var root = json.RootElement;
+        if (!root.TryGetProperty("url", out var url) || !Uri.TryCreate(url.GetString(), UriKind.Absolute, out var uri) || uri.Scheme != "https")
+            throw new InvalidOperationException("No compatible video stream was available.");
+        var title = root.TryGetProperty("title", out var t) ? t.GetString() ?? "YouTube video" : "YouTube video";
+        var quality = root.TryGetProperty("height", out var height) && height.TryGetInt32(out var h) ? $"{h}p" : "Available quality";
+        return new(uri, title, quality);
+    }
+    internal static async Task<StreamInfo> ResolveStream(string id, CancellationToken cancellation)
+    {
+        if (!VideoIdPattern().IsMatch(id)) throw new InvalidOperationException("Invalid YouTube video ID.");
+        var executable = Path.Combine(AppContext.BaseDirectory, "Tools", "yt-dlp.exe");
+        var deno = Path.Combine(AppContext.BaseDirectory, "Tools", "deno.exe");
+        if (!File.Exists(executable) || !File.Exists(deno)) throw new InvalidOperationException("The playback helper is missing. Extract the entire app download, including Tools.");
+        var start = SearchProcess(executable, "");
+        start.ArgumentList.Clear();
+        foreach (var arg in new[] { "--ignore-config", "--no-plugin-dirs", "--no-playlist", "--skip-download", "--dump-single-json", "--js-runtimes", "deno:" + deno, "--socket-timeout", "15", "--retries", "1", "-f", "b[ext=mp4]/b", "--", "https://www.youtube.com/watch?v=" + id }) start.ArgumentList.Add(arg);
+        return ParseStream(await Execute(start, cancellation));
+    }
+    private static async Task<string> Execute(ProcessStartInfo start, CancellationToken cancellation)
+    {
+        cancellation.ThrowIfCancellationRequested();
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
         deadline.CancelAfter(TimeSpan.FromSeconds(60));
-        using var process = new Process { StartInfo = SearchProcess(executable, query) };
+        using var process = new Process { StartInfo = start };
         process.Start();
         var output = process.StandardOutput.ReadToEndAsync();
         var errors = process.StandardError.ReadToEndAsync();
@@ -61,13 +88,14 @@ internal static partial class YouTubeService
             await process.WaitForExitAsync();
             await Task.WhenAll(output, errors);
             if (cancellation.IsCancellationRequested) throw;
-            throw new InvalidOperationException("Search timed out. Check your connection and try again.");
+            throw new InvalidOperationException("YouTube took too long to respond. Check your connection and try again.");
         }
         var result = await output;
         var error = await errors;
         if (process.ExitCode != 0) throw new InvalidOperationException(error.Contains("Sign in", StringComparison.OrdinalIgnoreCase) || error.Contains("bot", StringComparison.OrdinalIgnoreCase)
-            ? "YouTube temporarily blocked search. Try again later, or paste a video link to watch."
-            : "Search could not reach YouTube. Try again, or install a newer FluentTube build if the problem persists.");
-        return ParseSearchResults(result);
+            ? "YouTube requires verification for this request. Try a different public video or open it on YouTube."
+            : error.Contains("Requested format", StringComparison.OrdinalIgnoreCase) ? "No combined audio/video stream is available for native playback. Try a different video or import a local file."
+            : "Could not retrieve this YouTube content. It may be restricted or unavailable. Try again, or install a newer FluentTube build.");
+        return result;
     }
 }

@@ -26,3 +26,11 @@ var hostileQuery = "music \" --exec calc.exe & echo test";
 var start = YouTubeService.SearchProcess("yt-dlp.exe", hostileQuery);
 if (start.UseShellExecute || !start.CreateNoWindow || start.ArgumentList.Last() != "ytsearch24:" + hostileQuery || start.ArgumentList[^2] != "--") throw new Exception("Search arguments must remain a single literal query.");
 Console.WriteLine("Passed metadata filtering and literal process-argument checks.");
+var stream = YouTubeService.ParseStream("""{"url":"https://example.com/video.mp4","title":"Public video","height":360}""");
+if (stream.Quality != "360p" || stream.Title != "Public video") throw new Exception("Stream metadata failed.");
+foreach (var invalid in new[] { "file:///C:/video.mp4", "javascript:alert(1)", "http://example.com/video.mp4" })
+{
+    try { YouTubeService.ParseStream(System.Text.Json.JsonSerializer.Serialize(new { url = invalid })); throw new Exception("Unsafe stream URL accepted."); }
+    catch (InvalidOperationException) { }
+}
+Console.WriteLine("Passed native stream metadata and HTTPS-only source checks.");

@@ -23,7 +23,7 @@ jobs:
       - name: Verify executable and XAML resources
         shell: pwsh
         run: |
-          foreach ($file in @('FluentTube.exe', 'FluentTube.pri', 'Tools/yt-dlp.exe', 'Assets/Player/index.html')) {
+          foreach ($file in @('FluentTube.exe', 'FluentTube.pri', 'Tools/yt-dlp.exe', 'Tools/deno.exe')) {
             if (!(Test-Path "artifacts/FluentTube-win-x64/$file")) { throw "Missing app output: $file" }
           }
       - uses: actions/upload-artifact@v7.0.2

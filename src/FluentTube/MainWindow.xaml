@@ -1,9 +1,10 @@
 <Window x:Class="FluentTube.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="using:FluentTube" Title="FluentTube">
   <Grid x:Name="Root">
-    <NavigationView x:Name="Navigation" PaneDisplayMode="Left" IsBackButtonVisible="Collapsed" SelectionChanged="Navigate" Header="FluentTube">
+    <NavigationView x:Name="Navigation" PaneDisplayMode="Left" IsBackButtonVisible="Collapsed" SelectionChanged="Navigate" ItemInvoked="NavigationInvoked" Header="FluentTube">
       <NavigationView.MenuItems>
         <NavigationViewItem Content="Discover" Tag="home" Icon="Home" IsSelected="True" />
         <NavigationViewItem Content="Watch later" Tag="saved" Icon="Save" />
+        <NavigationViewItem Content="Import video" Tag="import" Icon="OpenFile" SelectsOnInvoked="False" />
       </NavigationView.MenuItems>
       <Grid Padding="28,8,28,24" RowSpacing="16">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
@@ -17,7 +18,7 @@
               <GridView x:Name="Videos" IsItemClickEnabled="True" ItemClick="VideoClicked" SelectionMode="None">
                 <GridView.ItemTemplate>
                   <DataTemplate x:DataType="local:Video">
-                    <Border Width="290" Margin="0,0,12,16" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <Border x:Name="VideoCard" Loaded="VideoCardLoaded" Width="290" Margin="0,0,12,16" CornerRadius="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                       <StackPanel Spacing="8">
                         <Image Source="{x:Bind Thumbnail}" Height="163" Stretch="UniformToFill"/>
                         <StackPanel Margin="12,0,12,16" Spacing="6"><TextBlock Text="{x:Bind Title}" TextWrapping="Wrap" MaxLines="2" FontWeight="SemiBold"/><TextBlock Text="{x:Bind Channel}" Opacity="0.65"/></StackPanel>
@@ -30,19 +31,37 @@
           </ScrollViewer>
           <Grid x:Name="PlayerPanel" Visibility="Collapsed" RowSpacing="12">
             <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-            <WebView2 x:Name="Player" MinHeight="240"/>
+            <MediaPlayerElement x:Name="Player" MinHeight="240" AreTransportControlsEnabled="True" AutoPlay="False" />
             <TextBlock x:Name="VideoTitle" Grid.Row="1" TextWrapping="Wrap" Style="{StaticResource SubtitleTextBlockStyle}"/>
             <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="12">
-              <Button Content="Save for later" Click="SaveVideo"/><Button Content="Open on YouTube" Click="OpenInBrowser"/><Button Content="Back to videos" Click="BackToVideos"/>
+              <Button Content="Save for later" Click="SaveVideo"/><Button Content="Open on YouTube" Click="OpenInBrowser"/><Button Content="Import video" Click="ImportVideo"/><Button Content="Back to videos" Click="BackToVideos"/>
             </StackPanel>
           </Grid>
           <ScrollViewer x:Name="SettingsPanel" Visibility="Collapsed">
             <StackPanel Spacing="16" MaxWidth="600" HorizontalAlignment="Left">
               <TextBlock Text="Settings" Style="{StaticResource TitleTextBlockStyle}"/>
+              <TextBlock Text="Appearance" Style="{StaticResource SubtitleTextBlockStyle}"/>
+              <ComboBox x:Name="ThemeChoice" Header="Theme" SelectedIndex="0" SelectionChanged="SettingsChanged" HorizontalAlignment="Stretch">
+                <x:String>System</x:String><x:String>Light</x:String><x:String>Dark</x:String>
+              </ComboBox>
+              <ComboBox x:Name="AccentChoice" Header="Accent color" SelectedIndex="0" SelectionChanged="SettingsChanged" HorizontalAlignment="Stretch">
+                <x:String>Blue</x:String><x:String>Purple</x:String><x:String>Green</x:String><x:String>Orange</x:String><x:String>Rose</x:String>
+              </ComboBox>
+              <ToggleSwitch x:Name="CompactChoice" Header="Compact video cards" Toggled="SettingsChanged"/>
+              <TextBlock Text="Playback" Style="{StaticResource SubtitleTextBlockStyle}"/>
+              <ToggleSwitch x:Name="AutoplayChoice" Header="Play automatically when opening a video" IsOn="True" Toggled="SettingsChanged"/>
+              <ToggleSwitch x:Name="LoopChoice" Header="Repeat the current video" Toggled="SettingsChanged"/>
+              <Slider x:Name="VolumeChoice" Header="Default volume" Minimum="0" Maximum="100" Value="80" StepFrequency="5" ValueChanged="SettingsChanged"/>
+              <ComboBox x:Name="SpeedChoice" Header="Playback speed" SelectedIndex="2" SelectionChanged="SettingsChanged" HorizontalAlignment="Stretch">
+                <x:String>0.5×</x:String><x:String>0.75×</x:String><x:String>1×</x:String><x:String>1.25×</x:String><x:String>1.5×</x:String><x:String>2×</x:String>
+              </ComboBox>
+              <ToggleSwitch x:Name="StartupChoice" Header="Open Watch later at startup" Toggled="SettingsChanged"/>
+              <Button Content="Reset preferences" Click="ResetSettings"/>
+              <TextBlock Text="Changes save automatically for this Windows account." TextWrapping="Wrap"/>
               <TextBlock Text="Search without an account" FontWeight="SemiBold"/>
               <TextBlock Text="Search uses the bundled yt-dlp helper to retrieve video information directly from YouTube. No API key, billing account, or FluentTube server is needed. Search may temporarily stop working when YouTube changes; install a newer FluentTube build for updated support." TextWrapping="Wrap"/>
-              <TextBlock Text="FluentTube 0.2 • Native WinUI 3 + .NET 10"/>
-              <TextBlock Text="Video playback uses YouTube's official web player inside WebView2. Availability, ads, and playback restrictions are controlled by YouTube. FluentTube is an independent project." TextWrapping="Wrap"/>
+              <TextBlock Text="FluentTube 0.3 • Native WinUI 3 + .NET 10"/>
+              <TextBlock Text="Videos play in the native Windows media player. Import local files or open public YouTube videos. Available quality and codecs depend on the source and Windows. Private, age-restricted, DRM-protected, or blocked videos may be unavailable. FluentTube is an independent project." TextWrapping="Wrap"/>
             </StackPanel>
           </ScrollViewer>
         </Grid>

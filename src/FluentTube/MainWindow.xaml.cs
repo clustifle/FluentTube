@@ -1,8 +1,10 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.Web.WebView2.Core;
 using System.IO;
+using Windows.Media.Core;
+using Windows.Media.Playback;
+using Windows.Storage;
 using Windows.System;
 namespace FluentTube;
 public sealed partial class MainWindow : Window
@@ -10,26 +12,48 @@ public sealed partial class MainWindow : Window
     private Video? current;
     private List<Video> saved = [];
     private CancellationTokenSource? request;
-    private bool ready;
+    private readonly MediaPlayer media = new();
+    private MediaSource? source;
+    private Preferences preferences = Preferences.Load();
+    private bool ready, applyingSettings, closed;
+    private int playbackGeneration;
     public MainWindow()
     {
         InitializeComponent();
         SystemBackdrop = new MicaBackdrop();
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 840));
+        Player.SetMediaPlayer(media);
+        media.MediaOpened += (_, _) => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (closed) return;
+            media.PlaybackSession.PlaybackRate = preferences.Speed;
+            ShowMessage("Native player ready • " + VideoTitle.Text);
+            if (preferences.AutoPlay && PlayerPanel.Visibility == Visibility.Visible) media.Play();
+        });
+        media.MediaFailed += (_, e) => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (!closed) ShowMessage("Windows could not play this source. The link may have expired, access may be blocked, or a codec may be unavailable. Reopen the video to retry, or import a supported local file.", true);
+        });
         Root.Loaded += Initialize;
-        Closed += (_, _) => { request?.Cancel(); Player.Close(); };
+        Closed += (_, _) => { closed = true; request?.Cancel(); media.Dispose(); source?.Dispose(); };
     }
     private async void Initialize(object sender, RoutedEventArgs args)
     {
+        if (ready) return;
         saved = LibraryStore.LoadVideos();
+        PopulateSettings();
         ready = true;
-        ShowMessage("Search YouTube or paste a video link. No API key or Google Cloud account needed.");
+        ApplyPreferences();
+        ShowMessage("Search YouTube, paste a video link, or import a local video. No account needed.");
         var link = Environment.GetCommandLineArgs().Skip(1).FirstOrDefault();
         var id = link is null ? null : YouTubeService.ParseVideoId(link);
         if (id is not null) await Play(new Video(id, "YouTube video", "YouTube"));
+        else if (link is not null && File.Exists(link)) await PlayLocal(link);
+        else if (preferences.StartWithSaved) Navigation.SelectedItem = Navigation.MenuItems[1];
     }
     private void ShowMessage(string message, bool error = false)
     {
+        if (closed) return;
         Status.Title = error ? "Something needs attention" : "FluentTube";
         Status.Message = message;
         Status.Severity = error ? InfoBarSeverity.Warning : InfoBarSeverity.Informational;
@@ -37,8 +61,7 @@ public sealed partial class MainWindow : Window
     }
     private void ShowPanel(string panel)
     {
-        // Stop audio when leaving the player.
-        if (panel != "player" && Player.CoreWebView2 is not null) Player.CoreWebView2.Navigate("about:blank");
+        if (panel != "player") { playbackGeneration++; media.Pause(); }
         BrowsePanel.Visibility = panel == "browse" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPanel.Visibility = panel == "settings" ? Visibility.Visible : Visibility.Collapsed;
         PlayerPanel.Visibility = panel == "player" ? Visibility.Visible : Visibility.Collapsed;
@@ -48,8 +71,10 @@ public sealed partial class MainWindow : Window
         if (!ready) return;
         request?.Cancel();
         if (args.IsSettingsSelected) { ShowPanel("settings"); return; }
+        var tag = (args.SelectedItem as NavigationViewItem)?.Tag as string;
+        if (tag == "import") { await PickVideo(); return; }
         ShowPanel("browse");
-        if ((args.SelectedItem as NavigationViewItem)?.Tag as string == "saved")
+        if (tag == "saved")
         {
             PageTitle.Text = "Watch later";
             Videos.ItemsSource = saved.ToList();
@@ -62,30 +87,30 @@ public sealed partial class MainWindow : Window
     {
         ShowPanel("browse");
         PageTitle.Text = query is null ? "Discover" : $"Results for “{query}”";
+        request?.Cancel();
         if (string.IsNullOrWhiteSpace(query))
         {
             Videos.ItemsSource = null;
-            EmptyState.Text = "Search for a topic, creator, or song above. You can also paste a YouTube video link.";
+            EmptyState.Text = "Search for a topic, creator, or song above. You can also paste a YouTube link or choose Import video.";
             EmptyState.Visibility = Visibility.Visible;
             ShowMessage("Search is ready. No API key or billing setup needed.");
             return;
         }
-        request?.Cancel();
         var active = request = new CancellationTokenSource();
         Search.IsEnabled = false;
         ShowMessage("Loading videos…");
         try
         {
             var videos = await YouTubeService.Fetch(query, active.Token);
-            if (active.IsCancellationRequested) return;
+            if (active.IsCancellationRequested || closed) return;
             Videos.ItemsSource = videos;
             EmptyState.Text = "No videos found. Try another search.";
             EmptyState.Visibility = videos.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-            ShowMessage($"{videos.Count} videos • Powered by YouTube");
+            ShowMessage($"{videos.Count} videos • YouTube search");
         }
-        catch (OperationCanceledException) { if (!active.IsCancellationRequested) ShowMessage("The request timed out. Try again.", true); }
-        catch (Exception e) { ShowMessage(e is InvalidOperationException ? e.Message : "Could not reach YouTube. Check your connection and try again.", true); }
-        finally { if (ReferenceEquals(active, request)) { Search.IsEnabled = true; request = null; } active.Dispose(); }
+        catch (OperationCanceledException) { }
+        catch (Exception e) { if (!active.IsCancellationRequested) ShowMessage(e is InvalidOperationException ? e.Message : "Could not reach YouTube. Check your connection and try again.", true); }
+        finally { if (ReferenceEquals(active, request)) { if (!closed) Search.IsEnabled = true; request = null; } active.Dispose(); }
     }
     private async void SearchSubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {
@@ -96,50 +121,69 @@ public sealed partial class MainWindow : Window
         else await LoadVideos(query);
     }
     private async void VideoClicked(object sender, ItemClickEventArgs args) => await Play((Video)args.ClickedItem);
+    private void SetSource(MediaSource next)
+    {
+        media.Pause();
+        media.Source = null;
+        source?.Dispose();
+        source = next;
+        media.Source = next;
+    }
     private async Task Play(Video video)
     {
+        if (video.LocalPath is not null) { await PlayLocal(video.LocalPath); return; }
         if (YouTubeService.ParseVideoId(video.Id) != video.Id) { ShowMessage("This saved video link is invalid.", true); return; }
         request?.Cancel();
+        var active = request = new CancellationTokenSource();
+        var generation = ++playbackGeneration;
         current = video;
         VideoTitle.Text = video.Title;
         ShowPanel("player");
+        media.Pause();
+        ShowMessage("Preparing native playback…");
         try
         {
-            if (Player.CoreWebView2 is null)
-            {
-                var environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, Path.Combine(LibraryStore.Folder, "WebView2"), null);
-                await Player.EnsureCoreWebView2Async(environment);
-                Player.CoreWebView2!.SetVirtualHostNameToFolderMapping("clustifle.github.io", Path.Combine(AppContext.BaseDirectory, "Assets", "Player"), CoreWebView2HostResourceAccessKind.DenyCors);
-                Player.CoreWebView2.WebMessageReceived += (_, e) =>
-                {
-                    if (!e.Source.StartsWith("https://clustifle.github.io/index.html", StringComparison.Ordinal)) return;
-                    try
-                    {
-                        using var message = System.Text.Json.JsonDocument.Parse(e.TryGetWebMessageAsString());
-                        var kind = message.RootElement.GetProperty("kind").GetString();
-                        if (kind == "ready") ShowMessage("YouTube player ready. Press Play to watch.");
-                        else if (kind == "playing") ShowMessage("Playing on YouTube");
-                        else if (kind == "error")
-                        {
-                            var code = message.RootElement.GetProperty("code").GetInt32();
-                            ShowMessage(code == 153 ? "YouTube could not verify the player identity (153). Choose Open on YouTube to continue."
-                                : $"YouTube could not play this video (error {code}). It may restrict embedding. Choose Open on YouTube.", true);
-                        }
-                    }
-                    catch (Exception) { /* Ignore messages outside the player status protocol. */ }
-                };
-                Player.CoreWebView2!.NewWindowRequested += async (_, e) =>
-                {
-                    e.Handled = true;
-                    if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri) && uri.Scheme == "https") await Launcher.LaunchUriAsync(uri);
-                };
-            }
-            // Load a real enclosing HTTPS document so iframe and player requests retain
-            // a consistent browser-generated Referer and origin (YouTube error 153).
-            Player.CoreWebView2.Navigate($"https://clustifle.github.io/index.html?v={video.Id}");
-            ShowMessage("YouTube player • If this video cannot be embedded, choose Open on YouTube.");
+            var stream = await YouTubeService.ResolveStream(video.Id, active.Token);
+            if (closed || active.IsCancellationRequested || generation != playbackGeneration) return;
+            current = video with { Title = stream.Title };
+            VideoTitle.Text = $"{stream.Title} • {stream.Quality}";
+            SetSource(MediaSource.CreateFromUri(stream.Url));
         }
-        catch (Exception) { ShowMessage("Could not initialize playback. Install Microsoft Edge WebView2 Runtime, or choose Open on YouTube.", true); }
+        catch (OperationCanceledException) { }
+        catch (Exception e) { if (!active.IsCancellationRequested) ShowMessage(e is InvalidOperationException ? e.Message : "Native playback could not be prepared. Try again or import a local video.", true); }
+        finally { if (ReferenceEquals(request, active)) request = null; active.Dispose(); }
+    }
+    private async Task PlayLocal(string path)
+    {
+        request?.Cancel();
+        var generation = ++playbackGeneration;
+        try
+        {
+            var file = await StorageFile.GetFileFromPathAsync(Path.GetFullPath(path));
+            if (closed || generation != playbackGeneration) return;
+            current = new Video("local:" + file.Path, file.DisplayName, "Local video", file.Path);
+            VideoTitle.Text = file.DisplayName;
+            ShowPanel("player");
+            SetSource(MediaSource.CreateFromStorageFile(file));
+        }
+        catch (Exception) { ShowMessage("Could not open this local file. Check that it still exists and is readable.", true); }
+    }
+    private async Task PickVideo()
+    {
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileOpenPicker();
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            foreach (var type in new[] { ".mp4", ".mkv", ".webm", ".mov", ".avi", ".wmv", ".m4v", ".mp3", ".m4a" }) picker.FileTypeFilter.Add(type);
+            var file = await picker.PickSingleFileAsync();
+            if (file is not null) await PlayLocal(file.Path);
+        }
+        catch (Exception) { ShowMessage("Could not open the video picker. Try passing the file path to FluentTube at launch.", true); }
+    }
+    private async void ImportVideo(object sender, RoutedEventArgs args) => await PickVideo();
+    private async void NavigationInvoked(NavigationView sender, NavigationViewItemInvokedEventArgs args)
+    {
+        if ((args.InvokedItemContainer as NavigationViewItem)?.Tag as string == "import") await PickVideo();
     }
     private void SaveVideo(object sender, RoutedEventArgs args)
     {
@@ -150,7 +194,73 @@ public sealed partial class MainWindow : Window
     }
     private async void OpenInBrowser(object sender, RoutedEventArgs args)
     {
-        if (current is not null) await Launcher.LaunchUriAsync(new Uri($"https://www.youtube.com/watch?v={current.Id}"));
+        if (current is { LocalPath: null }) await Launcher.LaunchUriAsync(new Uri($"https://www.youtube.com/watch?v={current.Id}"));
+        else ShowMessage("This is a local file. Use the native transport controls to play it.");
     }
     private void BackToVideos(object sender, RoutedEventArgs args) => ShowPanel("browse");
+    private void PopulateSettings()
+    {
+        applyingSettings = true;
+        ThemeChoice.SelectedItem = preferences.Theme;
+        AccentChoice.SelectedItem = preferences.Accent;
+        CompactChoice.IsOn = preferences.CompactCards;
+        AutoplayChoice.IsOn = preferences.AutoPlay;
+        LoopChoice.IsOn = preferences.Loop;
+        VolumeChoice.Value = preferences.Volume * 100;
+        SpeedChoice.SelectedIndex = Array.IndexOf(new[] { 0.5, 0.75, 1, 1.25, 1.5, 2 }, preferences.Speed);
+        StartupChoice.IsOn = preferences.StartWithSaved;
+        applyingSettings = false;
+    }
+    private void ApplyPreferences()
+    {
+        Root.RequestedTheme = preferences.Theme switch { "Light" => ElementTheme.Light, "Dark" => ElementTheme.Dark, _ => ElementTheme.Default };
+        var color = preferences.Accent switch
+        {
+            "Purple" => Windows.UI.Color.FromArgb(255, 137, 91, 221),
+            "Green" => Windows.UI.Color.FromArgb(255, 25, 145, 103),
+            "Orange" => Windows.UI.Color.FromArgb(255, 221, 111, 31),
+            "Rose" => Windows.UI.Color.FromArgb(255, 204, 74, 117),
+            _ => Windows.UI.Color.FromArgb(255, 0, 120, 212)
+        };
+        Root.Resources["SystemAccentColor"] = color;
+        Root.Resources["AccentFillColorDefaultBrush"] = new SolidColorBrush(color);
+        Search.BorderBrush = new SolidColorBrush(color);
+        media.Volume = preferences.Volume;
+        media.IsLoopingEnabled = preferences.Loop;
+        media.PlaybackSession.PlaybackRate = preferences.Speed;
+        ResizeCards(Videos);
+    }
+    private void SettingsChanged(object sender, RoutedEventArgs args)
+    {
+        if (!ready || applyingSettings) return;
+        preferences.Theme = ThemeChoice.SelectedItem as string ?? "System";
+        preferences.Accent = AccentChoice.SelectedItem as string ?? "Blue";
+        preferences.CompactCards = CompactChoice.IsOn;
+        preferences.AutoPlay = AutoplayChoice.IsOn;
+        preferences.Loop = LoopChoice.IsOn;
+        preferences.Volume = VolumeChoice.Value / 100;
+        preferences.Speed = new[] { 0.5, 0.75, 1, 1.25, 1.5, 2 }[Math.Clamp(SpeedChoice.SelectedIndex, 0, 5)];
+        preferences.StartWithSaved = StartupChoice.IsOn;
+        ApplyPreferences();
+        try { preferences.Save(); ShowMessage("Preferences saved."); }
+        catch (IOException) { ShowMessage("Could not save preferences. Check disk access.", true); }
+    }
+    private void ResetSettings(object sender, RoutedEventArgs args)
+    {
+        preferences = new Preferences();
+        PopulateSettings();
+        ApplyPreferences();
+        try { preferences.Save(); ShowMessage("Preferences restored to defaults."); }
+        catch (IOException) { ShowMessage("Could not save preferences.", true); }
+    }
+    private void VideoCardLoaded(object sender, RoutedEventArgs args) => ResizeCards((DependencyObject)sender);
+    private void ResizeCards(DependencyObject node)
+    {
+        if (node is Border { Name: "VideoCard" } card)
+        {
+            card.Width = preferences.CompactCards ? 230 : 290;
+            if (card.Child is StackPanel stack && stack.Children[0] is Image image) image.Height = card.Width * 9 / 16;
+        }
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++) ResizeCards(VisualTreeHelper.GetChild(node, i));
+    }
 }
