@@ -43,7 +43,7 @@ public sealed partial class MainWindow
         PageTitle.Text = kind switch { "search" => $"Results for “{query}”", "channel" => channel?.Name ?? "Channel", "subscriptions" => "Subscriptions", "saved" => "Watch later", "history" => "History", _ => "Home" };
         PageSubtitle.Text = kind switch
         {
-            "home" => library.Subscriptions.Count > 0 ? "Recent uploads from channels you follow locally." : "Explore YouTube. Follow channels to build your own feed.",
+            "home" => library.Subscriptions.Count > 0 && TopicChoice.SelectedIndex == 0 ? "Recent uploads from channels you follow locally." : "Explore YouTube. Follow channels to build your own feed.",
             "subscriptions" => "Latest uploads from your local subscriptions. These do not sync with a Google account.",
             "history" => "Videos played on this device, most recent first.", "saved" => "Your saved videos. Right-click a video to remove it.",
             "channel" => "Channel uploads", _ => "Videos on YouTube"
