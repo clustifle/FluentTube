@@ -52,6 +52,7 @@ public sealed partial class MainWindow
         };
         if (kind is "shorts" or "channelshorts") PageSubtitle.Text = "Public Shorts from this channel. Use Previous / Next or the arrow keys while watching.";
         TopicChoice.Visibility = kind == "home" ? Visibility.Visible : Visibility.Collapsed;
+        ImportSubscriptionsButton.Visibility = kind == "subscriptions" ? Visibility.Visible : Visibility.Collapsed;
         FollowButton.Visibility = kind == "channel" ? Visibility.Visible : Visibility.Collapsed;
         ChannelShortsButton.Visibility = kind is "channel" or "channelshorts" ? Visibility.Visible : Visibility.Collapsed;
         ChannelShortsButton.Content = kind == "channelshorts" ? "Videos" : "Shorts";
@@ -151,6 +152,7 @@ public sealed partial class MainWindow
         PageTitle.Text = result.Channel.Name; PageSubtitle.Text = "Channel uploads";
         TopicChoice.Visibility = Visibility.Collapsed; FollowButton.Visibility = Visibility.Visible; ClearHistoryButton.Visibility = Visibility.Collapsed;
         ChannelShortsButton.Visibility = Visibility.Visible; ChannelShortsButton.Content = "Shorts"; ShortsSourceChoice.Visibility = Visibility.Collapsed;
+        ImportSubscriptionsButton.Visibility = Visibility.Collapsed;
         RenderBrowse(result.Videos, "This channel has no public uploads available.");
         BrowseProgress.Visibility = Visibility.Collapsed; browseBusy = false;
         LoadMoreButton.Visibility = result.Videos.Count >= 24 ? Visibility.Visible : Visibility.Collapsed;

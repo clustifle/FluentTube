@@ -118,3 +118,30 @@ var portrait = StreamVariants.Parse(portraitFormats.RootElement);
 if (portrait.Count != 1 || portrait[0].QualityHeight != 1080 || !StreamVariants.Manifest(portrait).Contains("RESOLUTION=1080x1920")) throw new Exception("Portrait 1080p selection or aspect ratio failed.");
 if (YouTubeService.ParseStream("""{"url":"https://example.com/short.mp4","height":640,"width":360}""").Quality != "360p") throw new Exception("Portrait quality label failed.");
 Console.WriteLine("Passed portrait 1080p quality and manifest dimensions.");
+var takeoutCsv = "\uFEFFChannel Title,Channel Url,Channel Id\r\n\"Creator, \"\"A\"\"\",https://www.youtube.com/channel/UCsBjURrPoezykLs9EqgamOA,UCsBjURrPoezykLs9EqgamOA\r\n\"ไทย\nSecond line\",https://www.youtube.com/channel/UCBR8-60-B28hp2BmDPdntcQ,\r\nDuplicate,,UCsBjURrPoezykLs9EqgamOA\r\nBad,https://youtube.com.evil.example/channel/UCBR8-60-B28hp2BmDPdntcQ,bad\r\n";
+var takeout = TakeoutImport.Parse(takeoutCsv);
+if (takeout.Channels.Count != 2 || takeout.InvalidRows != 1 || takeout.DuplicateRows != 1 || takeout.Channels[0].Name != "Creator, \"A\"" || takeout.Channels[1].Name != "ไทย Second line") throw new Exception("Takeout CSV quoting, Unicode, invalid rows, or duplicates failed.");
+var mergedFollows = TakeoutImport.Merge([new(channelId, "Existing custom name")], takeout.Channels);
+if (mergedFollows.Count != 2 || mergedFollows[0].Name != "Existing custom name") throw new Exception("Takeout merge replaced an existing subscription.");
+if (TakeoutImport.Merge(mergedFollows, takeout.Channels).Count != 2) throw new Exception("Repeated Takeout import was not idempotent.");
+foreach (var badCsv in new[] { "", "title,url\nvideo,https://example.com", "Channel Id,Channel Title\n\"unfinished", "Channel Id,Channel Title\n\"bad\"text,name" })
+{
+    try { TakeoutImport.Parse(badCsv); throw new Exception("Invalid Takeout CSV accepted."); } catch (InvalidOperationException) { }
+}
+var takeoutZip = Path.Combine(Path.GetTempPath(), "FluentTube-takeout-check-" + Guid.NewGuid() + ".zip");
+try
+{
+    using (var archive = System.IO.Compression.ZipFile.Open(takeoutZip, System.IO.Compression.ZipArchiveMode.Create))
+    {
+        foreach (var entryName in new[] { "Takeout/YouTube and YouTube Music/subscriptions/subscriptions.csv", "OtherAccount/subscriptions.csv" })
+        {
+            using var writer = new StreamWriter(archive.CreateEntry(entryName).Open(), new System.Text.UTF8Encoding(true));
+            writer.Write(takeoutCsv);
+        }
+        using var ignored = new StreamWriter(archive.CreateEntry("unrelated.txt").Open()); ignored.Write("Ignored");
+    }
+    var zipped = await TakeoutImport.Read(takeoutZip);
+    if (zipped.Channels.Count != 2 || zipped.InvalidRows != 2 || zipped.DuplicateRows != 4) throw new Exception("Takeout ZIP reading or cross-file deduplication failed.");
+}
+finally { File.Delete(takeoutZip); }
+Console.WriteLine("Passed Takeout CSV/ZIP, Unicode, quoting, validation, duplicate accounting, and non-destructive merge checks.");

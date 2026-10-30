@@ -37,6 +37,7 @@
                   <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button Content="Refresh" Click="RefreshPage"/>
                     <Button Content="Add channel" Click="AddChannel"/>
+                    <Button x:Name="ImportSubscriptionsButton" Content="Import subscriptions" Click="ImportTakeout" Visibility="Collapsed"/>
                     <Button x:Name="FollowButton" Content="Follow" Click="FollowChannel" Visibility="Collapsed"/>
                     <Button x:Name="ChannelShortsButton" Content="Shorts" Click="OpenChannelShorts" Visibility="Collapsed"/>
                     <ComboBox x:Name="ShortsSourceChoice" MinWidth="180" MaxWidth="260" SelectionChanged="ShortsSourceChanged" Visibility="Collapsed" AutomationProperties.Name="Shorts channel"/>
@@ -156,6 +157,7 @@
                     <ComboBox x:Name="SpeedChoice" Header="Playback speed" SelectedIndex="2" SelectionChanged="SettingsChanged" MinWidth="220"><x:String>0.5×</x:String><x:String>0.75×</x:String><x:String>1×</x:String><x:String>1.25×</x:String><x:String>1.5×</x:String><x:String>2×</x:String></ComboBox>
                   </StackPanel>
                 </Expander>
+                <Expander Header="Subscriptions" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"><StackPanel Spacing="12"><TextBlock Text="Import your YouTube subscriptions from a Google Takeout ZIP or subscriptions.csv. Existing local follows are kept. No Google Cloud setup or account connection is needed." TextWrapping="Wrap"/><StackPanel Orientation="Horizontal" Spacing="12"><Button Content="Import subscriptions" Click="ImportTakeout"/><HyperlinkButton Content="Open Google Takeout" NavigateUri="https://takeout.google.com/"/></StackPanel><TextBlock Text="In Takeout, select YouTube and YouTube Music, then include only subscriptions. This is a one-time import; changes do not sync with YouTube." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel></Expander>
                 <Expander Header="Startup" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"><ToggleSwitch x:Name="StartupChoice" Header="Open Watch later at startup" Toggled="SettingsChanged"/></Expander>
                 <Expander Header="About FluentTube" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                   <StackPanel Spacing="12"><TextBlock Text="FluentTube 0.9" FontWeight="SemiBold"/><TextBlock Text="WinUI 3 and .NET 10"/><TextBlock Text="Home, channels, local subscriptions, and history work without a Google account. Local follows do not change your YouTube subscriptions. Public video access uses yt-dlp and YouTube feeds; availability and codecs depend on YouTube and Windows." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
