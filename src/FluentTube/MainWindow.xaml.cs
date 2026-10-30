@@ -20,7 +20,18 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        SystemBackdrop = new MicaBackdrop();
+        SystemBackdrop = new MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.BaseAlt };
+        ExtendsContentIntoTitleBar = true;
+        SetTitleBar(TitleBar);
+        AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
+        AppWindow.TitleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
+        Root.ActualThemeChanged += (_, _) => UpdateCaptionTheme();
+        Root.SizeChanged += (_, e) =>
+        {
+            HeroArt.Visibility = e.NewSize.Width >= 1100 ? Visibility.Visible : Visibility.Collapsed;
+            ToolbarBadge.Visibility = e.NewSize.Width >= 1100 ? Visibility.Visible : Visibility.Collapsed;
+            ContentLayout.Padding = new Thickness(e.NewSize.Width < 800 ? 16 : 28, 8, e.NewSize.Width < 800 ? 16 : 28, 20);
+        };
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 840));
         Player.SetMediaPlayer(media);
         media.MediaOpened += (_, _) => DispatcherQueue.TryEnqueue(() =>
@@ -76,10 +87,13 @@ public sealed partial class MainWindow : Window
         ShowPanel("browse");
         if (tag == "saved")
         {
+            WelcomePanel.Visibility = Visibility.Collapsed;
+            TopicsPanel.Visibility = Visibility.Collapsed;
             PageTitle.Text = "Watch later";
             Videos.ItemsSource = saved.ToList();
             EmptyState.Text = "Your saved videos will appear here. Open a video and choose Save for later.";
             EmptyState.Visibility = saved.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            EmptyCard.Visibility = EmptyState.Visibility;
         }
         else await LoadVideos(null);
     }
@@ -87,17 +101,21 @@ public sealed partial class MainWindow : Window
     {
         ShowPanel("browse");
         PageTitle.Text = query is null ? "Discover" : $"Results for “{query}”";
+        WelcomePanel.Visibility = string.IsNullOrWhiteSpace(query) ? Visibility.Visible : Visibility.Collapsed;
+        TopicsPanel.Visibility = string.IsNullOrWhiteSpace(query) ? Visibility.Visible : Visibility.Collapsed;
         request?.Cancel();
         if (string.IsNullOrWhiteSpace(query))
         {
             Videos.ItemsSource = null;
             EmptyState.Text = "Search for a topic, creator, or song above. You can also paste a YouTube link or choose Import video.";
             EmptyState.Visibility = Visibility.Visible;
+            EmptyCard.Visibility = Visibility.Visible;
             ShowMessage("Search is ready. No API key or billing setup needed.");
             return;
         }
         var active = request = new CancellationTokenSource();
         Search.IsEnabled = false;
+        EmptyCard.Visibility = Visibility.Collapsed;
         ShowMessage("Loading videos…");
         try
         {
@@ -106,6 +124,7 @@ public sealed partial class MainWindow : Window
             Videos.ItemsSource = videos;
             EmptyState.Text = "No videos found. Try another search.";
             EmptyState.Visibility = videos.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            EmptyCard.Visibility = EmptyState.Visibility;
             ShowMessage($"{videos.Count} videos • YouTube search");
         }
         catch (OperationCanceledException) { }
@@ -121,6 +140,13 @@ public sealed partial class MainWindow : Window
         else await LoadVideos(query);
     }
     private async void VideoClicked(object sender, ItemClickEventArgs args) => await Play((Video)args.ClickedItem);
+    private async void ExploreTopic(object sender, RoutedEventArgs args)
+    {
+        var topic = (sender as Button)?.Tag as string;
+        if (topic is null) return;
+        Search.Text = topic;
+        await LoadVideos(topic);
+    }
     private void SetSource(MediaSource next)
     {
         media.Pause();
@@ -224,7 +250,9 @@ public sealed partial class MainWindow : Window
         };
         Root.Resources["SystemAccentColor"] = color;
         Root.Resources["AccentFillColorDefaultBrush"] = new SolidColorBrush(color);
+        ((SolidColorBrush)Root.Resources["BrandBrush"]).Color = color;
         Search.BorderBrush = new SolidColorBrush(color);
+        UpdateCaptionTheme();
         media.Volume = preferences.Volume;
         media.IsLoopingEnabled = preferences.Loop;
         media.PlaybackSession.PlaybackRate = preferences.Speed;
@@ -259,8 +287,13 @@ public sealed partial class MainWindow : Window
         if (node is Border { Name: "VideoCard" } card)
         {
             card.Width = preferences.CompactCards ? 230 : 290;
-            if (card.Child is StackPanel stack && stack.Children[0] is Image image) image.Height = card.Width * 9 / 16;
+            if (card.Child is StackPanel stack && stack.Children[0] is Grid thumbnail) thumbnail.Height = card.Width * 9 / 16;
         }
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++) ResizeCards(VisualTreeHelper.GetChild(node, i));
+    }
+    private void UpdateCaptionTheme()
+    {
+        AppWindow.TitleBar.ButtonForegroundColor = Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
+        AppWindow.TitleBar.ButtonInactiveForegroundColor = Microsoft.UI.Colors.Gray;
     }
 }
