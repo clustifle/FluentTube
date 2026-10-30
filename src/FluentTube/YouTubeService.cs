@@ -89,8 +89,15 @@ internal static partial class YouTubeService
         foreach (var arg in new[] { "--playlist-start", ((Math.Clamp(page, 1, 10) - 1) * 24 + 1).ToString(), "--playlist-end", (Math.Clamp(page, 1, 10) * 24).ToString() }) start.ArgumentList.Insert(offset++, arg);
         return start;
     }
-    internal static async Task<List<Video>> FetchShorts(string channel, CancellationToken cancellation, int page = 1) =>
-        ParseSearchResults(await Execute(ShortsProcess(HelperPath, channel, page), cancellation)).Select(v => v with { IsShort = true }).ToList();
+    internal static async Task<List<Video>> FetchShorts(string channel, CancellationToken cancellation, int page = 1)
+    {
+        var text = await Execute(ShortsProcess(HelperPath, channel, page), cancellation);
+        using var json = JsonDocument.Parse(text);
+        var root = json.RootElement;
+        var id = root.TryGetProperty("channel_id", out var cid) && cid.ValueKind == JsonValueKind.String ? cid.GetString() : null;
+        var name = root.TryGetProperty("channel", out var cn) && cn.ValueKind == JsonValueKind.String ? cn.GetString() ?? "YouTube" : "YouTube";
+        return ParseSearchResults(text).Select(v => v with { IsShort = true, Channel = v.Channel == "YouTube" ? name : v.Channel, ChannelId = v.ChannelId ?? (IsChannelId(id) ? id : null) }).ToList();
+    }
     internal static async Task<List<Video>> Fetch(string query, CancellationToken cancellation, int page = 1)
     {
         var executable = HelperPath;
