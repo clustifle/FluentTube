@@ -231,3 +231,21 @@ for (var index = 10; index <= 60; index++)
 }
 if (PlaybackMath.Speed(0.1) != 0.5 || PlaybackMath.Speed(4) != 3 || PlaybackMath.Speed(double.NaN) != 1 || PlaybackMath.Speed(0.549999999) != 0.55) throw new Exception("Playback speed normalization failed.");
 Console.WriteLine("Passed all 51 playback speeds, range boundaries, and decimal-rounding checks.");
+var shortCandidates = new[] {
+    new Video("short-a", "A", "Creator A", IsShort: true),
+    new Video("short-b", "B", "Creator A", IsShort: true),
+    new Video("short-c", "C", "Creator B", IsShort: true),
+    new Video("long", "Long", "Creator C"),
+    new Video("short-a", "Duplicate", "Creator A", IsShort: true)
+};
+for (var attempt = 0; attempt < 30; attempt++)
+{
+    var ranked = ShortsRanking.Rank(shortCandidates, new Dictionary<string, double> { ["Creator A"] = 4, ["Creator B"] = -4 }, []);
+    if (ranked.Count != 3 || ranked.Select(v => v.Id).Distinct().Count() != 3 || ranked[0].Channel != "Creator A" || ranked[1].Channel != "Creator B")
+        throw new Exception("Shorts ranking lost preference, creator diversity, or deduplication.");
+    var unseen = ShortsRanking.Rank(shortCandidates, new Dictionary<string, double>(), ["short-a", "short-b"]);
+    if (unseen[0].Id != "short-c") throw new Exception("Shorts ranking failed to prioritize unseen clips.");
+}
+if (ShortsRanking.Feedback(1, 30) != -1 || ShortsRanking.Feedback(25, 30) != 2 || ShortsRanking.Feedback(10, 60) != 1 || ShortsRanking.Feedback(4, 60) != 0)
+    throw new Exception("Shorts watch/skip feedback failed.");
+Console.WriteLine("Passed Shorts preferences, unseen priority, creator diversity, deduplication, and watch/skip feedback.");

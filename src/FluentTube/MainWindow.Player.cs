@@ -50,7 +50,7 @@ public sealed partial class MainWindow
         VideoSurface.SizeChanged += (_, _) => QueuePipButtonRegions();
         FullscreenHeading.SizeChanged += (_, _) => QueuePipButtonRegions();
         media.PlaybackSession.NaturalVideoSizeChanged += (_, _) => DispatcherQueue.TryEnqueue(() => { if (!closed) UpdateNaturalVideoRatio(); });
-        playerTimer.Tick += (_, _) => RefreshPlayerControls();
+        playerTimer.Tick += (_, _) => { TickShorts(); RefreshPlayerControls(); };
         playerTimer.Start();
         seekTimer.Tick += (_, _) =>
         {
@@ -84,7 +84,7 @@ public sealed partial class MainWindow
     {
         VideoPoster.Visibility = Visibility.Collapsed;
         UpdateNaturalVideoRatio();
-        var position = qualitySeek ?? recoverySeek ?? (preferences.RememberPosition && loadedVideoId is not null ? history.Get(loadedVideoId, media.PlaybackSession.NaturalDuration.TotalSeconds) : 0);
+        var position = qualitySeek ?? recoverySeek ?? (preferences.RememberPosition && current?.IsShort != true && loadedVideoId is not null ? history.Get(loadedVideoId, media.PlaybackSession.NaturalDuration.TotalSeconds) : 0);
         if (position > 0 && media.PlaybackSession.CanSeek) media.PlaybackSession.Position = TimeSpan.FromSeconds(Math.Min(position, media.PlaybackSession.NaturalDuration.TotalSeconds));
         var start = qualityPlay ?? recoveryPlay ?? playWhenOpened;
         qualitySeek = null; qualityPlay = null;
@@ -289,7 +289,7 @@ public sealed partial class MainWindow
         WatchActions.Orientation = VideoFrame.ActualWidth < 460 ? Orientation.Vertical : Orientation.Horizontal;
         WatchChannel.MaxWidth = VideoFrame.ActualWidth;
         var portrait = videoRatio < 1;
-        var width = portrait ? Math.Min(VideoFrame.ActualWidth, Math.Max(240, PlayerPanel.ActualHeight - 100) * videoRatio) : VideoFrame.ActualWidth;
+        var width = portrait ? Math.Min(VideoFrame.ActualWidth, Math.Max(240, PlayerPanel.ActualHeight - 90) * videoRatio) : VideoFrame.ActualWidth;
         VideoSurfaceSlot.Width = width;
         VideoSurfaceSlot.Height = width / videoRatio;
     }

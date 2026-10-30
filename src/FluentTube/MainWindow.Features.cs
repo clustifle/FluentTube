@@ -8,12 +8,12 @@ internal sealed record ShortsSource(string Label, string Url) { public override 
 public sealed partial class MainWindow
 {
     private bool syncingShortsSources;
-    private string SelectedShortsSource => (ShortsSourceChoice.SelectedItem as ShortsSource)?.Url ?? "https://www.youtube.com/@YouTube";
+    private string SelectedShortsSource => (ShortsSourceChoice.SelectedItem as ShortsSource)?.Url ?? "for-you";
     private void RefreshShortsSources()
     {
         var selected = SelectedShortsSource;
         syncingShortsSources = true;
-        var sources = new List<ShortsSource> { new("YouTube", "https://www.youtube.com/@YouTube") };
+        var sources = new List<ShortsSource> { new("For you", "for-you"), new("YouTube", "https://www.youtube.com/@YouTube") };
         sources.AddRange(library.Subscriptions.Select(c => new ShortsSource(c.Name, c.Url)));
         ShortsSourceChoice.ItemsSource = sources;
         ShortsSourceChoice.SelectedItem = sources.FirstOrDefault(s => s.Url == selected) ?? sources[0];

@@ -60,7 +60,7 @@ public sealed partial class MainWindow : Window
         Root.SizeChanged += (_, e) =>
         {
             ContentLayout.Padding = new Thickness(e.NewSize.Width < 800 ? 16 : 24, 16, e.NewSize.Width < 800 ? 16 : 24, 16);
-            UpNextPanel.Visibility = e.NewSize.Width >= 1150 ? Visibility.Visible : Visibility.Collapsed;
+            UpNextPanel.Visibility = !shortsFeed && e.NewSize.Width >= 1150 ? Visibility.Visible : Visibility.Collapsed;
         };
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 840));
         Player.SetMediaPlayer(media);
@@ -132,6 +132,8 @@ public sealed partial class MainWindow : Window
         {
             Cleanup(historyTimer.Stop);
             foreach (var stop in new[] { preparation, request, browseRequest, qualityRequest, captionsRequest }.OfType<CancellationTokenSource>().Distinct()) Cleanup(stop.Cancel);
+            Cleanup(() => shortsRequest?.Cancel());
+            Cleanup(RecordShortFeedback);
             Cleanup(YouTubeService.Shutdown);
             Cleanup(() => media.Pause());
             Cleanup(() => Player.SetMediaPlayer(null));
@@ -180,7 +182,7 @@ public sealed partial class MainWindow : Window
     }
     private void ShowPanel(string panel)
     {
-        if (panel != "player") { SetPictureInPicture(false); SetFullscreen(false); playbackGeneration++; SavePosition(); media.Pause(); }
+        if (panel != "player") { RecordShortFeedback(); shortsFeed = false; shortsRequest?.Cancel(); SetPictureInPicture(false); SetFullscreen(false); playbackGeneration++; SavePosition(); media.Pause(); }
         BrowsePanel.Visibility = panel == "browse" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPanel.Visibility = panel == "settings" ? Visibility.Visible : Visibility.Collapsed;
         PlayerPanel.Visibility = panel == "player" ? Visibility.Visible : Visibility.Collapsed;
@@ -215,7 +217,8 @@ public sealed partial class MainWindow : Window
     }
     private async Task StartVideo(Video video)
     {
-        queue = browseVideos.Any(v => v.Id == video.Id) ? browseVideos.ToList() : [video];
+        shortsFeed = video.IsShort; shortsChannel = null; shortsPage = 1;
+        queue = browseVideos.Any(v => v.Id == video.Id) ? browseVideos.Where(v => !video.IsShort || v.IsShort).ToList() : [video];
         await Play(video);
     }
     private void SetSource(MediaSource next, string id, AdaptivePlayback? adaptive = null)
@@ -231,6 +234,8 @@ public sealed partial class MainWindow : Window
     }
     private async Task Play(Video video, bool refresh = false, bool startPlaying = false, bool recovery = false)
     {
+        if (current?.Id != video.Id || shortFeedbackId is null) { RecordShortFeedback(); shortWatched = 0; shortFeedbackId = video.IsShort ? video.Id : null; shortTick = DateTimeOffset.UtcNow; }
+        if (!video.IsShort) shortsFeed = false;
         if (!recovery) { recoveryAttempts = 0; recoverySeek = null; recoveryPlay = null; }
         lastRecordedId = null;
         if (preparingId != video.Id) preparation?.Cancel();
@@ -382,19 +387,46 @@ public sealed partial class MainWindow : Window
         var index = queue.FindIndex(v => v.Id == current?.Id);
         PreviousButton.IsEnabled = index > 0;
         NextButton.IsEnabled = index >= 0 && index < queue.Count - 1;
+        WatchDetailsPanel.Visibility = shortsFeed ? Visibility.Collapsed : Visibility.Visible;
+        UpNextPanel.Visibility = !shortsFeed && ContentLayout.ActualWidth >= 1100 ? Visibility.Visible : Visibility.Collapsed;
+        PlayerPanel.VerticalScrollMode = shortsFeed ? ScrollMode.Disabled : ScrollMode.Enabled;
+        PlayerPanel.VerticalScrollBarVisibility = shortsFeed ? ScrollBarVisibility.Hidden : ScrollBarVisibility.Visible;
         ShortNavigation.Visibility = current?.IsShort == true ? Visibility.Visible : Visibility.Collapsed;
         PreviousShortButton.IsEnabled = index > 0;
-        NextShortButton.IsEnabled = index >= 0 && index < queue.Count - 1;
-        ShortPosition.Text = index >= 0 ? $"{index + 1} / {queue.Count}" : "Shorts";
+        NextShortButton.IsEnabled = index >= 0 && (shortsFeed || index < queue.Count - 1);
+        ShortPosition.Text = shortsFeed ? "For you · Scroll ↓" : index >= 0 ? $"{index + 1} / {queue.Count}" : "Shorts";
         QueueView.ItemsSource = queue.ToList();
         QueueView.SelectedItem = index >= 0 ? queue[index] : null;
     }
     private async Task MoveQueue(int direction, bool autoPlay = false)
     {
-        var index = queue.FindIndex(v => v.Id == current?.Id);
-        if (index < 0 || index + direction < 0 || index + direction >= queue.Count) return;
-        await Play(queue[index + direction], startPlaying: autoPlay);
+        if (shortsMoving) return;
+        shortsMoving = true;
+        try
+        {
+            var movingId = current?.Id;
+            var wasShorts = shortsFeed;
+            var index = queue.FindIndex(v => v.Id == current?.Id);
+            if (shortsFeed && direction > 0 && index >= 0)
+            {
+                RecordShortFeedback();
+                var upcoming = ShortsRanking.Rank(queue.Skip(index + 1), library.ShortsAffinity, library.SeenShorts);
+                queue = queue.Take(index + 1).Concat(upcoming).ToList();
+            }
+            if (shortsFeed && direction > 0 && index >= queue.Count - 4) { await RefillShorts(); index = queue.FindIndex(v => v.Id == current?.Id); }
+            if (closed || current?.Id != movingId || wasShorts && !shortsFeed) return;
+            if (index < 0 || index + direction < 0 || index + direction >= queue.Count) return;
+            await Play(queue[index + direction], startPlaying: autoPlay || shortsFeed);
+            if (shortsFeed)
+            {
+                var next = queue.Skip(index + direction + 1).FirstOrDefault();
+                if (next is not null && preferences.PrepareOnHover) _ = Prepare(next, 0);
+                if (queue.Count - index - direction <= 4) _ = RefillShorts();
+            }
+        }
+        finally { shortsMoving = false; }
     }
+
     private async void PreviousVideo(object sender, RoutedEventArgs args) => await MoveQueue(-1);
     private async void NextVideo(object sender, RoutedEventArgs args) => await MoveQueue(1);
     private void Seek(double seconds)

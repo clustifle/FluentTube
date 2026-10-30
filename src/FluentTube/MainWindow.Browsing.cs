@@ -37,8 +37,11 @@ public sealed partial class MainWindow
         var active = request = new CancellationTokenSource();
         browseRequest = active;
         ShowPanel("browse");
+        HomeShortsSection.Visibility = kind == "home" ? Visibility.Visible : Visibility.Collapsed;
+        HomeVideosHeading.Visibility = HomeShortsSection.Visibility;
         if (!append) { browseKind = kind; browseQuery = query; browsingChannel = channel; browsePage = 1; }
         var page = append ? browsePage + 1 : 1;
+        var homeShortsTask = kind == "home" && !append ? LoadHomeShorts(active.Token) : Task.CompletedTask;
         syncingNavigation = true;
         Navigation.SelectedItem = Navigation.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => channel is not null ? i.Tag is ChannelSubscription c && c.Id == channel.Id : i.Tag as string == (kind == "search" ? "home" : kind));
         syncingNavigation = false;
@@ -50,7 +53,7 @@ public sealed partial class MainWindow
             "history" => "Videos played on this device, most recent first.", "saved" => "Your saved videos. Right-click a video to remove it.",
             "channel" => "Channel uploads", _ => "Videos on YouTube"
         };
-        if (kind is "shorts" or "channelshorts") PageSubtitle.Text = "Public Shorts from this channel. Use Previous / Next or the arrow keys while watching.";
+        if (kind is "shorts" or "channelshorts") PageSubtitle.Text = "A mix for you, shaped by what you watch on this device. Scroll or swipe for the next Short.";
         TopicChoice.Visibility = kind == "home" ? Visibility.Visible : Visibility.Collapsed;
         ImportSubscriptionsButton.Visibility = kind == "subscriptions" ? Visibility.Visible : Visibility.Collapsed;
         FollowButton.Visibility = kind == "channel" ? Visibility.Visible : Visibility.Collapsed;
@@ -74,7 +77,8 @@ public sealed partial class MainWindow
             var failed = 0;
             if (kind == "saved") videos = saved.ToList();
             else if (kind == "history") videos = library.Watched.ToList();
-            else if (kind is "shorts" or "channelshorts") videos = await YouTubeService.FetchShorts(kind == "channelshorts" ? channel!.Url : SelectedShortsSource, active.Token, page);
+            else if (kind == "shorts" && (ShortsSourceChoice.SelectedItem as ShortsSource)?.Url == "for-you" && library.Shorts.Count > 0 && !append) videos = ShortsRanking.Rank(library.Shorts, library.ShortsAffinity, library.SeenShorts);
+            else if (kind is "shorts" or "channelshorts") videos = kind == "shorts" && (ShortsSourceChoice.SelectedItem as ShortsSource)?.Url == "for-you" ? await FetchShortsMix(page, active.Token) : await YouTubeService.FetchShorts(kind == "channelshorts" ? channel!.Url : SelectedShortsSource, active.Token, page);
             else if (kind == "subscriptions" || kind == "home" && library.Subscriptions.Count > 0 && TopicChoice.SelectedIndex == 0)
             {
                 var result = await YouTubeService.FetchSubscriptions(library.Subscriptions.ToList(), active.Token);
@@ -104,6 +108,15 @@ public sealed partial class MainWindow
             RenderBrowse(combined, kind switch { "saved" => "Save a video to Watch later to find it here.", "history" => "Play a video to add it to your history.", "subscriptions" => library.Subscriptions.Count == 0 ? "No subscriptions yet. Choose Add channel to follow a creator." : "No recent uploads are available. Try Refresh.", _ => "No videos found. Try another search or refresh this page." });
             var pageable = kind is "search" or "channel" or "shorts" or "channelshorts" || kind == "home" && (library.Subscriptions.Count == 0 || TopicChoice.SelectedIndex > 0);
             LoadMoreButton.Visibility = pageable && videos.Count >= 24 && page < 10 ? Visibility.Visible : Visibility.Collapsed;
+            if (kind is "shorts" or "channelshorts" && combined.Count > 0)
+            {
+                if (kind == "shorts" && (ShortsSourceChoice.SelectedItem as ShortsSource)?.Url == "for-you") { library.Shorts = combined.Take(120).ToList(); SaveLibrary(); }
+                shortsFeed = true; shortsPage = page;
+                shortsChannel = kind == "channelshorts" ? channel!.Url : (ShortsSourceChoice.SelectedItem as ShortsSource)?.Url == "for-you" ? null : SelectedShortsSource;
+                queue = combined;
+                await Play(combined[0], startPlaying: true);
+                return;
+            }
             ShowMessage(failed == 0 ? $"{combined.Count} videos" : $"Couldn't refresh {failed} channel(s). Showing available and cached uploads.", failed > 0);
         }
         catch (OperationCanceledException) { }
@@ -119,6 +132,7 @@ public sealed partial class MainWindow
         {
             if (ReferenceEquals(request, active)) request = null;
             if (ReferenceEquals(browseRequest, active)) { browseRequest = null; browseBusy = false; if (!closed) BrowseProgress.Visibility = Visibility.Collapsed; }
+            try { await homeShortsTask; } catch (OperationCanceledException) { } catch (Exception) { /* The video feed remains usable if the Shorts shelf is unavailable. */ }
             active.Dispose();
         }
     }
@@ -149,6 +163,7 @@ public sealed partial class MainWindow
         Navigation.SelectedItem = Navigation.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => i.Tag is ChannelSubscription c && c.Id == result.Channel.Id);
         syncingNavigation = false;
         ShowPanel("browse");
+        HomeShortsSection.Visibility = HomeVideosHeading.Visibility = Visibility.Collapsed;
         PageTitle.Text = result.Channel.Name; PageSubtitle.Text = "Channel uploads";
         TopicChoice.Visibility = Visibility.Collapsed; FollowButton.Visibility = Visibility.Visible; ClearHistoryButton.Visibility = Visibility.Collapsed;
         ChannelShortsButton.Visibility = Visibility.Visible; ChannelShortsButton.Content = "Shorts"; ShortsSourceChoice.Visibility = Visibility.Collapsed;

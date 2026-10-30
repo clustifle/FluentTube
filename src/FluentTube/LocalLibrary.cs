@@ -12,6 +12,9 @@ internal sealed class LocalLibrary
     public List<Video> Watched { get; set; } = [];
     public List<Video> Feed { get; set; } = [];
     public List<Video> Explore { get; set; } = [];
+    public List<Video> Shorts { get; set; } = [];
+    public Dictionary<string, double> ShortsAffinity { get; set; } = [];
+    public List<string> SeenShorts { get; set; } = [];
     public static LocalLibrary Load()
     {
         try
@@ -21,6 +24,9 @@ internal sealed class LocalLibrary
             value.Watched = (value.Watched ?? []).Where(v => v is not null).Take(200).ToList();
             value.Feed ??= [];
             value.Explore ??= [];
+            value.Shorts ??= [];
+            value.ShortsAffinity ??= [];
+            value.SeenShorts ??= [];
             return value;
         }
         catch (Exception e) when (e is IOException or JsonException) { return new(); }
