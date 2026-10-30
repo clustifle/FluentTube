@@ -8,6 +8,12 @@ using System.Net.Http;
 namespace FluentTube;
 internal static partial class YouTubeService
 {
+    private static readonly HelperProcessRunner Helpers = new();
+    internal static void Shutdown()
+    {
+        Helpers.Dispose();
+        Streams.Dispose(); QualityStreams.Dispose(); FeedClient.Dispose();
+    }
     internal static string HelperPath
     {
         get
@@ -238,25 +244,10 @@ internal static partial class YouTubeService
     }
     private static async Task<string> Execute(ProcessStartInfo start, CancellationToken cancellation)
     {
-        cancellation.ThrowIfCancellationRequested();
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-        deadline.CancelAfter(TimeSpan.FromSeconds(60));
-        using var process = new Process { StartInfo = start };
-        process.Start();
-        var output = process.StandardOutput.ReadToEndAsync();
-        var errors = process.StandardError.ReadToEndAsync();
-        try { await process.WaitForExitAsync(deadline.Token); }
-        catch (OperationCanceledException)
-        {
-            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
-            await process.WaitForExitAsync();
-            await Task.WhenAll(output, errors);
-            if (cancellation.IsCancellationRequested) throw;
-            throw new InvalidOperationException("YouTube took too long to respond. Check your connection and try again.");
-        }
-        var result = await output;
-        var error = await errors;
-        if (process.ExitCode != 0) throw new InvalidOperationException(error.Contains("Sign in", StringComparison.OrdinalIgnoreCase) || error.Contains("bot", StringComparison.OrdinalIgnoreCase)
+        var completed = await Helpers.Run(start, cancellation);
+        var result = completed.Output;
+        var error = completed.Error;
+        if (completed.ExitCode != 0) throw new InvalidOperationException(error.Contains("Sign in", StringComparison.OrdinalIgnoreCase) || error.Contains("bot", StringComparison.OrdinalIgnoreCase)
             ? "YouTube requires verification for this request. Try a different public video or open it on YouTube."
             : error.Contains("Requested format", StringComparison.OrdinalIgnoreCase) ? "No combined audio/video stream is available for native playback. Try a different video or import a local file."
             : "Could not retrieve this YouTube content. It may be restricted or unavailable. Try again, or install a newer FluentTube build.");

@@ -15,6 +15,8 @@ These are development-machine and media-engine harness checks. They do not launc
 
 ## Manual Windows checks still required
 
+- [ ] Close the main window and PiP during lookup and HD playback; confirm the FluentTube process and its helper processes exit. Minimize should continue playback and remain restorable.
+
 - [ ] Extract and launch on a clean Windows 11 x64 machine without a preinstalled .NET/Windows App SDK runtime.
 - [ ] Search, Home, channel pagination, local follows, and Watch later work.
 - [ ] Takeout preview/cancel/import preserves existing data; refreshing loads uploads.

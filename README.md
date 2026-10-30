@@ -41,6 +41,8 @@ YouTube search and stream resolution use unofficial access and may be throttled 
 
 ## Privacy and dependencies
 
+Closing the main window or PiP ends the application rather than leaving it running in the background. Shutdown saves the last playback position when possible, cancels browsing/preparation/captions, stops owned yt-dlp helper trees, releases the native player and display-awake request, and exits WinUI. Minimizing PiP remains separate and keeps playback running.
+
 Search and playback requests go directly to YouTube/Google. No FluentTube server, browser cookies, API key, or yt-dlp user configuration/plugins are used. Local data lives in `%LOCALAPPDATA%\FluentTube`. Old version 0.1 keys are no longer read or used.
 
 The Windows build bundles the pinned **yt-dlp 2026.10.26 directory distribution** and **Deno 2.9.8**, verified against SHA-256 hashes at build time. The directory distribution avoids the standalone executable's repeated extraction overhead; keep its `_internal` directory intact. Deno supplies the JavaScript runtime required by yt-dlp's YouTube support. Dependency license notices are included in `Tools`. The app does not update executables at runtime; install a newer FluentTube build for updated helper support.

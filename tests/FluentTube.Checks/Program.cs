@@ -1,4 +1,15 @@
 using FluentTube;
+if (args.FirstOrDefault() == "--shutdown-child") { await Task.Delay(Timeout.Infinite); return; }
+if (args.Length == 2 && args[0] == "--shutdown-parent")
+{
+    var childStart = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true };
+    if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase)) childStart.ArgumentList.Add(typeof(TakeoutImport).Assembly.Location);
+    childStart.ArgumentList.Add("--shutdown-child");
+    using var child = System.Diagnostics.Process.Start(childStart)!;
+    await File.WriteAllTextAsync(args[1] + ".ready", $"{Environment.ProcessId},{child.Id}");
+    File.Move(args[1] + ".ready", args[1]);
+    await Task.Delay(Timeout.Infinite); return;
+}
 var cases = new (string Input, string? Expected)[]
 {
     ("dQw4w9WgXcQ", "dQw4w9WgXcQ"),
@@ -172,3 +183,31 @@ if (smallerPip.Width != 240 || largerPip.Width != 640 || Math.Abs(largerPip.Widt
 var boundedPip = PlaybackMath.PipSize(9d / 16, 500, 400, 2);
 if (boundedPip.Height != 400 || boundedPip.Width != 225) throw new Exception("Enlarged portrait PiP exceeded display bounds.");
 Console.WriteLine("Passed scalable PiP zoom and display-bound checks.");
+var shutdownCache = new StreamCache<int>(async (_, token) => { await Task.Delay(Timeout.Infinite, token); return 1; }, _ => DateTimeOffset.UtcNow.AddMinutes(1));
+var shutdownLookup = shutdownCache.Get("preparing", CancellationToken.None);
+shutdownCache.Dispose(); shutdownCache.Dispose();
+try { await shutdownLookup.WaitAsync(TimeSpan.FromSeconds(3)); throw new Exception("Shutdown did not cancel extraction."); } catch (OperationCanceledException) { }
+try { await shutdownCache.Get("new", CancellationToken.None); throw new Exception("Closed cache accepted more work."); } catch (OperationCanceledException) { }
+var processFile = Path.Combine(Path.GetTempPath(), "FluentTube-process-check-" + Guid.NewGuid() + ".txt");
+using (var helpers = new HelperProcessRunner())
+{
+    var processStart = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+    if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase)) processStart.ArgumentList.Add(typeof(TakeoutImport).Assembly.Location);
+    processStart.ArgumentList.Add("--shutdown-parent"); processStart.ArgumentList.Add(processFile);
+    var runningHelper = helpers.Run(processStart, CancellationToken.None);
+    try
+    {
+        var waitUntil = DateTime.UtcNow.AddSeconds(10);
+        while (!File.Exists(processFile) && DateTime.UtcNow < waitUntil) await Task.Delay(50);
+        var pids = (await File.ReadAllTextAsync(processFile)).Split(',').Select(int.Parse).ToArray();
+        using var parent = System.Diagnostics.Process.GetProcessById(pids[0]);
+        using var child = System.Diagnostics.Process.GetProcessById(pids[1]);
+        helpers.Dispose(); helpers.Dispose();
+        try { await runningHelper.WaitAsync(TimeSpan.FromSeconds(5)); throw new Exception("Shutdown helper was not canceled."); } catch (OperationCanceledException) { }
+        await parent.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        await child.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        try { await helpers.Run(processStart, CancellationToken.None); throw new Exception("Helper launched after shutdown."); } catch (OperationCanceledException) { }
+    }
+    finally { helpers.Dispose(); if (File.Exists(processFile)) File.Delete(processFile); }
+}
+Console.WriteLine("Passed shutdown cancellation, owned helper/child process termination, and repeat-close checks.");

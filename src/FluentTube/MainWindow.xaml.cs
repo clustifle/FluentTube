@@ -115,7 +115,33 @@ public sealed partial class MainWindow : Window
             if (!preferences.Loop && PlayerPanel.Visibility == Visibility.Visible && (current?.IsShort == true ? preferences.ShortsAutoNext : preferences.AutoPlayNext)) await MoveQueue(1, autoPlay: true);
         });
         Root.Loaded += Initialize;
-        Closed += (_, _) => { SavePosition(); closed = true; historyTimer.Stop(); preparation?.Cancel(); request?.Cancel(); media.Dispose(); source?.Dispose(); DisposeUnifiedPlayer(); };
+        Closed += OnWindowClosed;
+    }
+    private static void Cleanup(Action action)
+    {
+        try { action(); }
+        catch (Exception error) { System.Diagnostics.Debug.WriteLine(error); }
+    }
+    private void OnWindowClosed(object sender, WindowEventArgs args)
+    {
+        if (closed) return;
+        Cleanup(SavePosition);
+        closed = true;
+        playbackGeneration++;
+        try
+        {
+            Cleanup(historyTimer.Stop);
+            foreach (var stop in new[] { preparation, request, browseRequest, qualityRequest, captionsRequest }.OfType<CancellationTokenSource>().Distinct()) Cleanup(stop.Cancel);
+            Cleanup(YouTubeService.Shutdown);
+            Cleanup(() => media.Pause());
+            Cleanup(() => Player.SetMediaPlayer(null));
+            Cleanup(() => media.Source = null);
+            Cleanup(media.Dispose);
+            Cleanup(() => source?.Dispose());
+            source = null;
+            DisposeUnifiedPlayer();
+        }
+        finally { ((App)Application.Current).CompleteShutdown(); }
     }
     private async void Initialize(object sender, RoutedEventArgs args)
     {

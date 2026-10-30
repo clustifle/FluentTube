@@ -3,7 +3,7 @@ namespace FluentTube;
 // Share extraction work between hover preparation and playback. Each caller can
 // cancel independently; the worker stops when nobody needs its result anymore.
 internal sealed class StreamCache<T>(Func<string, CancellationToken, Task<T>> factory,
-    Func<T, DateTimeOffset> expires, int capacity = 12, Func<DateTimeOffset>? clock = null)
+    Func<T, DateTimeOffset> expires, int capacity = 12, Func<DateTimeOffset>? clock = null) : IDisposable
 {
     private sealed class Pending
     {
@@ -15,11 +15,13 @@ internal sealed class StreamCache<T>(Func<string, CancellationToken, Task<T>> fa
     private readonly Dictionary<string, (T Value, DateTimeOffset Expires, long Used)> values = [];
     private readonly Dictionary<string, Pending> pending = [];
     private long sequence;
+    private bool disposed;
     private DateTimeOffset Now => clock?.Invoke() ?? DateTimeOffset.UtcNow;
     public bool TryGet(string id, out T value)
     {
         lock (gate)
         {
+            if (disposed) { value = default!; return false; }
             if (values.TryGetValue(id, out var hit) && hit.Expires > Now)
             {
                 values[id] = (hit.Value, hit.Expires, ++sequence);
@@ -38,6 +40,7 @@ internal sealed class StreamCache<T>(Func<string, CancellationToken, Task<T>> fa
         bool start = false;
         lock (gate)
         {
+            if (disposed) throw new OperationCanceledException("Stream preparation has stopped.");
             if (values.TryGetValue(id, out var hit) && hit.Expires > Now)
             {
                 values[id] = (hit.Value, hit.Expires, ++sequence);
@@ -96,6 +99,17 @@ internal sealed class StreamCache<T>(Func<string, CancellationToken, Task<T>> fa
         {
             values.Remove(id);
             if (pending.Remove(id, out var work)) work.Stop.Cancel();
+        }
+    }
+    public void Dispose()
+    {
+        lock (gate)
+        {
+            if (disposed) return;
+            disposed = true;
+            values.Clear();
+            foreach (var work in pending.Values.ToArray()) work.Stop.Cancel();
+            pending.Clear();
         }
     }
 }

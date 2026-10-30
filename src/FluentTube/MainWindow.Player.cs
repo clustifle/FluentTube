@@ -133,7 +133,7 @@ public sealed partial class MainWindow
         try
         {
             LoadingPlayback.Visibility = Visibility.Visible;
-            if (variants.Count > 0) prepared = await AdaptivePlayback.Create(variants);
+            if (variants.Count > 0) prepared = await AdaptivePlayback.Create(variants, cancellation);
             if (closed || cancellation.IsCancellationRequested || current?.Id != id || playbackGeneration != generation) { prepared?.Dispose(); return; }
             qualitySeek = media.PlaybackSession.Position.TotalSeconds;
             qualityPlay = media.PlaybackSession.PlaybackState == MediaPlaybackState.Playing;
@@ -215,6 +215,7 @@ public sealed partial class MainWindow
     }
     private void ShowPlayerControls()
     {
+        if (closed) return;
         lastPlayerInput = DateTimeOffset.UtcNow;
         SetControlsVisible(true);
     }
@@ -236,6 +237,7 @@ public sealed partial class MainWindow
     private void PlayerControlsGettingFocus(UIElement sender, GettingFocusEventArgs args) => ShowPlayerControls();
     private void SetControlsVisible(bool visible)
     {
+        if (closed) return;
         PlayerControls.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
         PipControls.Visibility = isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
         FullscreenHeading.Visibility = isFullscreen || isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
@@ -265,6 +267,7 @@ public sealed partial class MainWindow
     private void VideoSlotSizeChanged(object sender, SizeChangedEventArgs args) => UpdateVideoSize();
     private void UpdateVideoSize()
     {
+        if (closed) return;
         // Inline height depends on width, never on the description height.
         if (VideoFrame.ActualWidth <= 0) return;
         WatchActions.Orientation = VideoFrame.ActualWidth < 460 ? Orientation.Vertical : Orientation.Horizontal;
@@ -455,9 +458,10 @@ public sealed partial class MainWindow
     }
     private void DisposeUnifiedPlayer()
     {
-        captionsRequest?.Cancel(); captionsClient.Dispose();
-        playerTimer.Stop(); seekTimer.Stop(); qualityRequest?.Cancel();
-        adaptivePlayback?.Dispose();
+        Cleanup(playerTimer.Stop); Cleanup(seekTimer.Stop);
+        Cleanup(captionsClient.Dispose);
+        Cleanup(() => adaptivePlayback?.Dispose());
+        adaptivePlayback = null;
         if (keepingDisplayAwake) { try { displayRequest.RequestRelease(); } catch (Exception) { } }
     }
 }

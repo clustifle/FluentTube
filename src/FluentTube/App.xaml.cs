@@ -3,6 +3,7 @@ namespace FluentTube;
 public partial class App : Application
 {
     private Window? window;
+    internal void CompleteShutdown() { window = null; Exit(); }
     public App()
     {
         UnhandledException += (_, e) => LogFailure(new Exception(e.Message, e.Exception));
