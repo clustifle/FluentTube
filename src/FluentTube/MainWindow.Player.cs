@@ -30,11 +30,6 @@ public sealed partial class MainWindow
     [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "IsIconic")]
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
     private static extern bool NativeIsIconic(IntPtr window);
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
-    private static extern bool ReleaseCapture();
-    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW")]
-    private static extern IntPtr SendWindowMessage(IntPtr window, uint message, nuint wParam, IntPtr lParam);
     private double videoRatio = 16d / 9;
     private readonly Windows.UI.ViewManagement.UISettings motionSettings = new();
     private DateTimeOffset lastPlayerInput = DateTimeOffset.UtcNow;
@@ -374,12 +369,12 @@ public sealed partial class MainWindow
         RefreshPlayerControls();
     }
     private void ClosePlayerWindow(object sender, RoutedEventArgs args) => Close();
-    private void DragPictureInPicture(object sender, PointerRoutedEventArgs args)
+    private ResizeBounds? PictureInPictureDragRegion()
     {
-        if (!isPictureInPicture || !args.GetCurrentPoint(VideoDragRegion).Properties.IsLeftButtonPressed) return;
-        args.Handled = true;
-        ReleaseCapture();
-        SendWindowMessage(WinRT.Interop.WindowNative.GetWindowHandle(this), 0x00A1, 2, IntPtr.Zero);
+        if (!isPictureInPicture || closed || VideoDragRegion.ActualWidth <= 0) return null;
+        var rect = VideoDragRegion.TransformToVisual(Root).TransformBounds(new Windows.Foundation.Rect(0, 0, VideoDragRegion.ActualWidth, VideoDragRegion.ActualHeight));
+        var scale = Root.XamlRoot?.RasterizationScale ?? 1;
+        return new((int)Math.Floor(rect.Left * scale), (int)Math.Floor(rect.Top * scale), (int)Math.Ceiling(rect.Right * scale), (int)Math.Ceiling(rect.Bottom * scale));
     }
     private void ResizePictureInPicture()
     {
@@ -443,7 +438,7 @@ public sealed partial class MainWindow
                 pipWindowSizing ??= new PipWindowSizing(WinRT.Interop.WindowNative.GetWindowHandle(this),
                     () => isPictureInPicture && !closed, () => videoRatio,
                     () => { var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea; return (area.Width, area.Height); },
-                    width => { pipDraggedWidth = width; pipSizedRatio = videoRatio; pipSizedScale = Root.XamlRoot?.RasterizationScale ?? 1; pipSizedZoom = pipZoom; });
+                    width => { pipDraggedWidth = width; pipSizedRatio = videoRatio; pipSizedScale = Root.XamlRoot?.RasterizationScale ?? 1; pipSizedZoom = pipZoom; }, PictureInPictureDragRegion);
             }
             catch (Exception)
             {

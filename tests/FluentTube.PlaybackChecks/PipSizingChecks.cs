@@ -22,6 +22,9 @@ internal static class PipSizingChecks
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetClientRect(IntPtr window, out Rect rect);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ClientToScreen(IntPtr window, ref Point point);
     internal static void Run()
     {
         // No WS_VISIBLE: this window never appears or takes focus.
@@ -34,7 +37,16 @@ internal static class PipSizingChecks
             var frameWidth = outer.Right - outer.Left - (client.Right - client.Left);
             var frameHeight = outer.Bottom - outer.Top - (client.Bottom - client.Top);
             var active = true; var ended = false;
-            using var sizing = new PipWindowSizing(window, () => active, () => 16d / 9, () => (1600, 1000), _ => ended = true);
+            using var sizing = new PipWindowSizing(window, () => active, () => 16d / 9, () => (1600, 1000), _ => ended = true, () => new ResizeBounds(0, 0, 120, 32));
+            IntPtr Hit(int x, int y)
+            {
+                var point = new Point { X = x, Y = y };
+                ClientToScreen(window, ref point);
+                var packed = unchecked((int)(((uint)point.Y & 0xFFFF) << 16 | ((uint)point.X & 0xFFFF)));
+                return SendMessage(window, 0x0084, 0, new IntPtr(packed));
+            }
+            if (Hit(30, 20) != new IntPtr(2)) throw new Exception("The blank PiP header is not a native drag region.");
+            if (Hit(150, 20) != new IntPtr(1)) throw new Exception("PiP buttons were intercepted by the drag region.");
             foreach (var edge in Enumerable.Range(1, 8))
             {
                 Marshal.StructureToPtr(new Rect { Left = 100, Top = 100, Right = 800, Bottom = 650 }, memory, false);
@@ -64,13 +76,14 @@ internal static class PipSizingChecks
             if (first.Right - first.Left > outer.Right - outer.Left + 1) throw new Exception("PiP enlarged at drag start.");
             SendMessage(window, 0x0232, 0, IntPtr.Zero);
             active = false;
+            if (Hit(30, 20) == new IntPtr(2)) throw new Exception("Normal window client area became draggable outside PiP.");
             Marshal.StructureToPtr(new Rect { Left = 1, Top = 2, Right = 555, Bottom = 333 }, memory, false);
             SendMessage(window, 0x0214, 8, memory);
             if (Marshal.PtrToStructure<Rect>(memory).Right != 555) throw new Exception("Normal window sizing was intercepted outside PiP.");
             active = true; sizing.Dispose();
             SendMessage(window, 0x0214, 8, memory);
             if (Marshal.PtrToStructure<Rect>(memory).Right != 555) throw new Exception("Native resize callback remained installed after disposal.");
-            Console.WriteLine("PASS native Windows PiP subclass: eight resize edges, aspect ratio, small tracking minimum, no drag-start growth, resize lifecycle, passthrough, and cleanup");
+            Console.WriteLine("PASS native PiP header dragging, button hit testing, resize edges, aspect ratio, small tracking minimum, no drag-start growth, passthrough, and cleanup");
         }
         finally { Marshal.FreeHGlobal(memory); DestroyWindow(window); }
     }

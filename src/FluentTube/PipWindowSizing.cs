@@ -28,6 +28,11 @@ internal sealed class PipWindowSizing : IDisposable
     private static extern bool GetClientRect(IntPtr window, out Rect rect);
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr window);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ScreenToClient(IntPtr window, ref Point point);
+    [DllImport("user32.dll", EntryPoint = "DefWindowProcW")]
+    private static extern IntPtr DefWindowProc(IntPtr window, uint message, nuint wParam, IntPtr lParam);
     private const nuint Id = 0x46545049;
     private readonly IntPtr window;
     private readonly WindowProc callback;
@@ -35,13 +40,15 @@ internal sealed class PipWindowSizing : IDisposable
     private readonly Func<double> ratio;
     private readonly Func<(int Width, int Height)> bounds;
     private readonly Action<double> resized;
+    private readonly Func<ResizeBounds?>? dragRegion;
     private bool disposed;
     private Rect? dragWindow, dragClient;
     private bool? cornerHeightDriven;
     internal bool IsResizing { get; private set; }
-    internal PipWindowSizing(IntPtr window, Func<bool> enabled, Func<double> ratio, Func<(int Width, int Height)> bounds, Action<double> resized)
+    internal PipWindowSizing(IntPtr window, Func<bool> enabled, Func<double> ratio, Func<(int Width, int Height)> bounds, Action<double> resized, Func<ResizeBounds?>? dragRegion = null)
     {
         this.window = window; this.enabled = enabled; this.ratio = ratio; this.bounds = bounds; this.resized = resized;
+        this.dragRegion = dragRegion;
         callback = Handle;
         if (!SetWindowSubclass(window, callback, Id, 0)) throw new InvalidOperationException("Windows could not enable PiP edge resizing.");
     }
@@ -54,9 +61,17 @@ internal sealed class PipWindowSizing : IDisposable
                 if (message == 0x0084)
                 {
                     var hit = DefSubclassProc(handle, message, wParam, lParam);
-                    // The custom PiP header owns its buttons and drag area. Keep native edge hits.
+                    if (hit.ToInt64() is >= 10 and <= 17) return hit;
+                    var point = new Point { X = unchecked((short)(lParam.ToInt64() & 0xFFFF)), Y = unchecked((short)((lParam.ToInt64() >> 16) & 0xFFFF)) };
+                    if (ScreenToClient(handle, ref point) && dragRegion?.Invoke() is ResizeBounds region &&
+                        point.Y >= region.Top && point.Y < region.Bottom && GetClientRect(handle, out var headerClient) &&
+                        point.X >= 0 && point.X < headerClient.Right)
+                        return new IntPtr(point.X >= region.Left && point.X < region.Right ? 2 : 1);
+                    // Header buttons stay client controls; only the blank region initiates a native move.
                     return hit.ToInt64() is 2 or 8 or 9 or 20 ? new IntPtr(1) : hit;
                 }
+                if (message == 0x00A1 && wParam == 2 || message == 0x0112 && (wParam & 0xFFF0) == 0xF010)
+                    return DefWindowProc(handle, message, wParam, lParam);
                 if (message == 0x0112 && (wParam & 0xFFF0) == 0xF030) return IntPtr.Zero; // No maximize in PiP.
                 if (message == 0x0024 && GetWindowRect(handle, out var tracked) && GetClientRect(handle, out var trackedClient))
                 {
