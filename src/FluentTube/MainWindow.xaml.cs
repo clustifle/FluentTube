@@ -99,9 +99,9 @@ public sealed partial class MainWindow : Window
         {
             if (Player.CoreWebView2 is null)
             {
-                var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(LibraryStore.Folder, "WebView2"));
+                var environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, Path.Combine(LibraryStore.Folder, "WebView2"), null);
                 await Player.EnsureCoreWebView2Async(environment);
-                Player.CoreWebView2.NewWindowRequested += async (_, e) =>
+                Player.CoreWebView2!.NewWindowRequested += async (_, e) =>
                 {
                     e.Handled = true;
                     if (Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri) && uri.Scheme == "https") await Launcher.LaunchUriAsync(uri);
