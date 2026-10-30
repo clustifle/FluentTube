@@ -29,6 +29,7 @@
           <Grid Padding="24">
             <ScrollViewer x:Name="BrowsePanel" HorizontalScrollBarVisibility="Disabled">
               <StackPanel Spacing="20">
+                <StackPanel.ChildrenTransitions><TransitionCollection><EntranceThemeTransition IsStaggeringEnabled="False"/></TransitionCollection></StackPanel.ChildrenTransitions>
                 <StackPanel Spacing="8">
                   <TextBlock x:Name="PageTitle" Text="Home" Style="{StaticResource TitleTextBlockStyle}" TextWrapping="Wrap"/>
                   <TextBlock x:Name="PageSubtitle" Text="Explore videos or follow channels to build your feed." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
@@ -72,23 +73,24 @@
                 <Button x:Name="LoadMoreButton" Content="Load more" Click="LoadMore" HorizontalAlignment="Center" Visibility="Collapsed"/>
               </StackPanel>
             </ScrollViewer>
-            <Grid x:Name="PlayerPanel" Visibility="Collapsed" RowSpacing="16">
+            <ScrollViewer x:Name="PlayerPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Visible" HorizontalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch"><Grid RowSpacing="16">
+              <Grid.ChildrenTransitions><TransitionCollection><EntranceThemeTransition IsStaggeringEnabled="False"/></TransitionCollection></Grid.ChildrenTransitions>
               <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-              <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+              <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
               <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <Button Click="BackToVideos" AutomationProperties.Name="Back to videos" ToolTipService.ToolTip="Back"><SymbolIcon Symbol="Back"/></Button>
                 <TextBlock x:Name="VideoTitle" Grid.Column="1" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" MaxLines="2" VerticalAlignment="Center"/>
               </Grid>
-              <Grid x:Name="VideoSurfaceSlot" Grid.Row="1" Background="Black">
-                <Grid x:Name="VideoSurface" Background="Black" RequestedTheme="Dark" PointerMoved="RevealPlayerControls" PointerPressed="RevealPlayerControls" DoubleTapped="VideoDoubleTapped">
-                  <MediaPlayerElement x:Name="Player" MinHeight="180" AreTransportControlsEnabled="False" AutoPlay="False" IsTabStop="True"/>
+              <Grid x:Name="VideoSurfaceSlot" Grid.Row="1" Background="Black" SizeChanged="VideoSlotSizeChanged">
+                <Grid x:Name="VideoSurface" Background="Black" RequestedTheme="Dark" PointerEntered="RevealPlayerControls" PointerExited="LeaveVideoSurface" PointerMoved="RevealPlayerControls" PointerPressed="RevealPlayerControls" DoubleTapped="VideoDoubleTapped">
+                  <MediaPlayerElement x:Name="Player" Stretch="Uniform" AreTransportControlsEnabled="False" AutoPlay="False" IsTabStop="True"/>
                   <Image x:Name="VideoPoster" Stretch="Uniform" IsHitTestVisible="False"/>
                   <ProgressBar x:Name="LoadingPlayback" IsIndeterminate="True" Visibility="Collapsed" VerticalAlignment="Top" Height="2" IsHitTestVisible="False"/>
                   <Border x:Name="FullscreenHeading" Visibility="Collapsed" VerticalAlignment="Top" Padding="16" Background="#A0000000">
                     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Text, ElementName=VideoTitle}" Foreground="White" FontSize="18" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/><Button Grid.Column="1" Click="ToggleFullscreen" ToolTipService.ToolTip="Exit fullscreen (Esc)" AutomationProperties.Name="Exit fullscreen"><SymbolIcon Symbol="BackToWindow"/></Button></Grid>
                   </Border>
-                  <Border x:Name="PlayerControls" VerticalAlignment="Bottom" Background="#E0202020" Margin="12" Padding="10" CornerRadius="6" PointerEntered="HoldPlayerControls" PointerExited="ReleasePlayerControls">
+                  <Border x:Name="PlayerControls" VerticalAlignment="Bottom" Background="#E0202020" Margin="12" Padding="10" CornerRadius="6" GettingFocus="PlayerControlsGettingFocus" PointerEntered="HoldPlayerControls" PointerExited="ReleasePlayerControls">
                     <Grid RowSpacing="8">
                       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                       <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><Slider x:Name="PlayerTimeline" Minimum="0" Maximum="1" ValueChanged="TimelineChanged" AutomationProperties.Name="Video timeline"/><TextBlock x:Name="PlayerTime" Grid.Column="1" Text="0:00 / 0:00" FontSize="12" Foreground="White" VerticalAlignment="Center"/></Grid>
@@ -121,7 +123,7 @@
                 <ToggleSwitch x:Name="QueueAutoplay" Header="Autoplay next" Toggled="QueueAutoplayChanged"/>
                 <ListView x:Name="QueueView" IsItemClickEnabled="True" ItemClick="VideoClicked" SelectionMode="Single" MaxHeight="420"><ListView.ItemTemplate><DataTemplate x:DataType="local:Video"><StackPanel Padding="4,8" Spacing="4"><TextBlock Text="{x:Bind Title}" TextWrapping="Wrap" MaxLines="2"/><TextBlock Text="{x:Bind Channel}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel></DataTemplate></ListView.ItemTemplate></ListView>
               </StackPanel>
-            </Grid>
+            </Grid></ScrollViewer>
             <ScrollViewer x:Name="SettingsPanel" Visibility="Collapsed" HorizontalScrollBarVisibility="Disabled">
               <StackPanel Spacing="16" MaxWidth="800" HorizontalAlignment="Left">
                 <TextBlock Text="Settings" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,8"/>

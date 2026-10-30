@@ -162,7 +162,12 @@ internal static partial class YouTubeService
         }
         return until;
     }
-    internal static Task<StreamInfo> ResolveStream(string id, CancellationToken cancellation) => Streams.Get(id, cancellation);
+    internal static Task<StreamInfo> ResolveStream(string id, CancellationToken cancellation)
+    {
+        cancellation.ThrowIfCancellationRequested();
+        // Full metadata also contains the compatible stream: never re-extract it on a repeat open.
+        return QualityStreams.TryGet(id, out var cached) ? Task.FromResult(cached) : Streams.Get(id, cancellation);
+    }
     internal static Task<StreamInfo> ResolveQualities(string id, CancellationToken cancellation) => QualityStreams.Get(id, cancellation);
     internal static void InvalidateStream(string id) { Streams.Invalidate(id); QualityStreams.Invalidate(id); }
     internal static StreamInfo ParseStream(string jsonText)

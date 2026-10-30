@@ -16,6 +16,9 @@ public sealed partial class MainWindow
     private readonly DispatcherTimer playerTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private readonly DispatcherTimer seekTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
     private bool syncingPlayer, seeking, holdingPlayer, playerMenuOpen, isFullscreen;
+    private bool controlsVisible = true, pointerInVideo;
+    private double videoRatio = 16d / 9;
+    private readonly Windows.UI.ViewManagement.UISettings motionSettings = new();
     private DateTimeOffset lastPlayerInput = DateTimeOffset.UtcNow;
     private AppWindowPresenter? previousPresenter;
     private CancellationTokenSource? qualityRequest;
@@ -29,6 +32,7 @@ public sealed partial class MainWindow
 
     private void InitializeUnifiedPlayer()
     {
+        media.PlaybackSession.NaturalVideoSizeChanged += (_, _) => DispatcherQueue.TryEnqueue(() => { if (!closed) UpdateNaturalVideoRatio(); });
         playerTimer.Tick += (_, _) => RefreshPlayerControls();
         playerTimer.Start();
         seekTimer.Tick += (_, _) =>
@@ -52,11 +56,14 @@ public sealed partial class MainWindow
         syncingPlayer = false;
         VideoPoster.Source = video.LocalPath is null ? new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(video.Thumbnail)) : null;
         VideoPoster.Visibility = Visibility.Visible;
-        ShowPlayerControls();
+        videoRatio = 16d / 9;
+        UpdateVideoSize();
+        SetControlsVisible(false);
     }
     private void OnUnifiedMediaOpened()
     {
         VideoPoster.Visibility = Visibility.Collapsed;
+        UpdateNaturalVideoRatio();
         var position = qualitySeek ?? (preferences.RememberPosition && loadedVideoId is not null ? history.Get(loadedVideoId, media.PlaybackSession.NaturalDuration.TotalSeconds) : 0);
         if (position > 0 && media.PlaybackSession.CanSeek) media.PlaybackSession.Position = TimeSpan.FromSeconds(Math.Min(position, media.PlaybackSession.NaturalDuration.TotalSeconds));
         var start = qualityPlay ?? playWhenOpened;
@@ -157,12 +164,11 @@ public sealed partial class MainWindow
         syncingPlayer = false;
         PlayerTime.Text = $"{PlaybackMath.Time(seeking ? PlayerTimeline.Value : session.Position.TotalSeconds)} / {PlaybackMath.Time(duration)}";
         ToolTipService.SetToolTip(PlayerQuality, $"Playing at {session.NaturalVideoWidth} × {session.NaturalVideoHeight}");
-        if (playing && !holdingPlayer && !playerMenuOpen && !seeking && DateTimeOffset.UtcNow - lastPlayerInput > TimeSpan.FromSeconds(3))
+        if (!holdingPlayer && !playerMenuOpen && !seeking && DateTimeOffset.UtcNow - lastPlayerInput > TimeSpan.FromSeconds(3))
         {
-            PlayerControls.Visibility = Visibility.Collapsed;
-            FullscreenHeading.Visibility = Visibility.Collapsed;
+            SetControlsVisible(false);
         }
-        else if (!playing) ShowPlayerControls();
+
         var awake = playing && PlayerPanel.Visibility == Visibility.Visible;
         if (awake != keepingDisplayAwake)
         {
@@ -172,14 +178,64 @@ public sealed partial class MainWindow
     private void ShowPlayerControls()
     {
         lastPlayerInput = DateTimeOffset.UtcNow;
-        PlayerControls.Visibility = Visibility.Visible;
-        FullscreenHeading.Visibility = isFullscreen ? Visibility.Visible : Visibility.Collapsed;
+        SetControlsVisible(true);
     }
-    private void RevealPlayerControls(object sender, PointerRoutedEventArgs args) => ShowPlayerControls();
+    private void AnimatePage(FrameworkElement page)
+    {
+        if (!motionSettings.AnimationsEnabled) return;
+        Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.SetIsTranslationEnabled(page, true);
+        var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(page);
+        var fade = visual.Compositor.CreateScalarKeyFrameAnimation();
+        fade.InsertKeyFrame(0, 0); fade.InsertKeyFrame(1, 1);
+        fade.Duration = TimeSpan.FromMilliseconds(180);
+        visual.StartAnimation("Opacity", fade);
+        var slide = visual.Compositor.CreateVector3KeyFrameAnimation();
+        slide.InsertKeyFrame(0, new System.Numerics.Vector3(0, 8, 0));
+        slide.InsertKeyFrame(1, System.Numerics.Vector3.Zero);
+        slide.Duration = TimeSpan.FromMilliseconds(220);
+        visual.StartAnimation("Translation", slide);
+    }
+    private void PlayerControlsGettingFocus(UIElement sender, GettingFocusEventArgs args) => ShowPlayerControls();
+    private void SetControlsVisible(bool visible)
+    {
+        FullscreenHeading.Visibility = isFullscreen ? Visibility.Visible : Visibility.Collapsed;
+        PlayerControls.IsHitTestVisible = visible;
+        FullscreenHeading.IsHitTestVisible = visible;
+        if (controlsVisible == visible) return;
+        controlsVisible = visible;
+        foreach (var element in new UIElement[] { PlayerControls, FullscreenHeading })
+        {
+            var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(element);
+            if (!motionSettings.AnimationsEnabled) { visual.StopAnimation("Opacity"); visual.Opacity = visible ? 1 : 0; continue; }
+            var fade = visual.Compositor.CreateScalarKeyFrameAnimation();
+            fade.InsertKeyFrame(1, visible ? 1 : 0);
+            fade.Duration = TimeSpan.FromMilliseconds(visible ? 140 : 200);
+            visual.StartAnimation("Opacity", fade);
+        }
+    }
+    private void UpdateNaturalVideoRatio()
+    {
+        var session = media.PlaybackSession;
+        if (session.NaturalVideoWidth > 0 && session.NaturalVideoHeight > 0)
+            videoRatio = (double)session.NaturalVideoWidth / session.NaturalVideoHeight;
+        UpdateVideoSize();
+    }
+    private void VideoSlotSizeChanged(object sender, SizeChangedEventArgs args) => UpdateVideoSize();
+    private void UpdateVideoSize()
+    {
+        // Inline height depends on width, never on the description height.
+        if (VideoSurfaceSlot.ActualWidth > 0) VideoSurfaceSlot.Height = VideoSurfaceSlot.ActualWidth / videoRatio;
+    }
+    private void RevealPlayerControls(object sender, PointerRoutedEventArgs args) { pointerInVideo = true; ShowPlayerControls(); }
+    private void LeaveVideoSurface(object sender, PointerRoutedEventArgs args)
+    {
+        pointerInVideo = false; holdingPlayer = false;
+        if (!playerMenuOpen && !seeking) SetControlsVisible(false);
+    }
     private void HoldPlayerControls(object sender, PointerRoutedEventArgs args) { holdingPlayer = true; ShowPlayerControls(); }
-    private void ReleasePlayerControls(object sender, PointerRoutedEventArgs args) { holdingPlayer = false; ShowPlayerControls(); }
+    private void ReleasePlayerControls(object sender, PointerRoutedEventArgs args) { holdingPlayer = false; if (pointerInVideo) ShowPlayerControls(); }
     private void PlayerMenuOpened(object sender, object args) { playerMenuOpen = true; ShowPlayerControls(); }
-    private void PlayerMenuClosed(object sender, object args) { playerMenuOpen = false; ShowPlayerControls(); }
+    private void PlayerMenuClosed(object sender, object args) { playerMenuOpen = false; if (pointerInVideo) ShowPlayerControls(); else SetControlsVisible(false); }
     private void TimelineChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs args)
     {
         if (!ready || syncingPlayer || source is null) return;
@@ -246,6 +302,7 @@ public sealed partial class MainWindow
             previousPresenter = null;
         }
         isFullscreen = value;
+        UpdateVideoSize();
         FullscreenButton.Content = new SymbolIcon(value ? Symbol.BackToWindow : Symbol.FullScreen);
         ShowPlayerControls();
         Player.Focus(FocusState.Programmatic);

@@ -129,6 +129,7 @@ public sealed partial class MainWindow : Window
         BrowsePanel.Visibility = panel == "browse" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPanel.Visibility = panel == "settings" ? Visibility.Visible : Visibility.Collapsed;
         PlayerPanel.Visibility = panel == "player" ? Visibility.Visible : Visibility.Collapsed;
+        AnimatePage(panel == "player" ? PlayerPanel : panel == "settings" ? SettingsPanel : BrowsePanel);
         NowPlayingItem.IsEnabled = current is not null;
         if (panel == "player") DispatcherQueue.TryEnqueue(() => { if (!closed && PlayerPanel.Visibility == Visibility.Visible) Player.Focus(FocusState.Programmatic); });
     }
@@ -293,7 +294,7 @@ public sealed partial class MainWindow : Window
     private async void PrepareVideo(object sender, PointerRoutedEventArgs args)
     {
         if (!preferences.PrepareOnHover || (sender as FrameworkElement)?.DataContext is not Video { LocalPath: null } video) return;
-        await Prepare(video, 450);
+        await Prepare(video, 150);
     }
     private async Task PrepareFollowingVideo()
     {
@@ -313,7 +314,13 @@ public sealed partial class MainWindow : Window
         catch (Exception) { /* Preparation is optional; opening a video reports actual failures. */ }
         finally { if (ReferenceEquals(preparation, active)) { preparation = null; preparingId = null; } active.Dispose(); }
     }
-    private void CancelPreparation(object sender, PointerRoutedEventArgs args) => preparation?.Cancel();
+    private async void CancelPreparation(object sender, PointerRoutedEventArgs args)
+    {
+        // Allow a click to join extraction before releasing the hover waiter.
+        var leaving = preparation;
+        await Task.Delay(350);
+        if (ReferenceEquals(preparation, leaving) && current?.Id != preparingId) leaving?.Cancel();
+    }
     private void UpdateQueueButtons()
     {
         var index = queue.FindIndex(v => v.Id == current?.Id);

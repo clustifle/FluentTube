@@ -45,7 +45,9 @@ cancelOne.Cancel();
 try { await first; throw new Exception("Canceled cache caller completed."); } catch (OperationCanceledException) { }
 releases.SetResult(42);
 if (await second != 42 || await cache.Get("video", CancellationToken.None) != 42 || calls != 1) throw new Exception("Shared extraction or warm reuse failed.");
+if (!cache.TryGet("video", out var warm) || warm != 42) throw new Exception("Ready stream lookup missed a valid cache entry.");
 now = now.AddMinutes(2);
+if (cache.TryGet("video", out _)) throw new Exception("Ready stream lookup accepted an expired URL.");
 await cache.Get("video", CancellationToken.None);
 if (calls != 2) throw new Exception("Expired stream was reused.");
 cache.Invalidate("video");

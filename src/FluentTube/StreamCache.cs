@@ -16,6 +16,21 @@ internal sealed class StreamCache<T>(Func<string, CancellationToken, Task<T>> fa
     private readonly Dictionary<string, Pending> pending = [];
     private long sequence;
     private DateTimeOffset Now => clock?.Invoke() ?? DateTimeOffset.UtcNow;
+    public bool TryGet(string id, out T value)
+    {
+        lock (gate)
+        {
+            if (values.TryGetValue(id, out var hit) && hit.Expires > Now)
+            {
+                values[id] = (hit.Value, hit.Expires, ++sequence);
+                value = hit.Value;
+                return true;
+            }
+            values.Remove(id);
+            value = default!;
+            return false;
+        }
+    }
     public async Task<T> Get(string id, CancellationToken cancellation)
     {
         cancellation.ThrowIfCancellationRequested();
