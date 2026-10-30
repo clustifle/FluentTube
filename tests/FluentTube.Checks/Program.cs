@@ -211,3 +211,16 @@ using (var helpers = new HelperProcessRunner())
     finally { helpers.Dispose(); if (File.Exists(processFile)) File.Delete(processFile); }
 }
 Console.WriteLine("Passed shutdown cancellation, owned helper/child process termination, and repeat-close checks.");
+foreach (var edge in Enumerable.Range(1, 8))
+{
+    var proposed = new ResizeBounds(100, 120, 716, 528);
+    var resized = PipResizeGeometry.Apply(proposed, edge, 16d / 9, 16, 8, edge is 3 or 6, 1200, 900);
+    if (Math.Abs((resized.Width - 16d) / (resized.Height - 8d) - 16d / 9) > 0.01) throw new Exception("Mouse resizing changed the video aspect ratio.");
+    if ((edge is 1 or 4 or 7) ? resized.Right != proposed.Right : resized.Left != proposed.Left) throw new Exception("Mouse resize did not anchor the opposite horizontal edge.");
+    if ((edge is 3 or 4 or 5) ? resized.Bottom != proposed.Bottom : resized.Top != proposed.Top) throw new Exception("Mouse resize did not anchor the opposite vertical edge.");
+}
+var portraitDrag = PipResizeGeometry.Apply(new(0, 0, 1200, 1200), 8, 9d / 16, 16, 8, true, 800, 600);
+if (portraitDrag.Height - 8 > 600 || Math.Abs((portraitDrag.Width - 16d) / (portraitDrag.Height - 8d) - 9d / 16) > 0.01) throw new Exception("Portrait edge resizing exceeded screen bounds.");
+var tinyDrag = PipResizeGeometry.Apply(new(0, 0, 50, 50), 8, 1, 16, 8, false, 1200, 900, 400, 200);
+if (tinyDrag.Width - 16 != 400 || tinyDrag.Height - 8 != 400) throw new Exception("High-DPI minimum resize size failed.");
+Console.WriteLine("Passed all eight mouse-resize edges/corners, aspect locking, anchoring, screen limits, and DPI minimums.");

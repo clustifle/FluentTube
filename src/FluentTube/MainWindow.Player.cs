@@ -21,6 +21,8 @@ public sealed partial class MainWindow
     private Windows.Graphics.RectInt32 pipPreviousBounds;
     private double pipSizedRatio, pipSizedScale, pipSizedZoom;
     private double pipZoom = 1;
+    private PipWindowSizing? pipWindowSizing;
+    private double? pipDraggedWidth;
     [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "ShowWindow")]
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
     private static extern bool NativeShowWindow(IntPtr window, int command);
@@ -343,12 +345,20 @@ public sealed partial class MainWindow
     private void ResizePictureInPicture()
     {
         if (!isPictureInPicture || closed) return;
+        if (pipWindowSizing?.IsResizing == true) return;
         if (NativeIsIconic(WinRT.Interop.WindowNative.GetWindowHandle(this))) return;
         var scale = Root.XamlRoot?.RasterizationScale ?? 1;
         if (Math.Abs(videoRatio - pipSizedRatio) < 0.001 && Math.Abs(scale - pipSizedScale) < 0.001 && Math.Abs(pipZoom - pipSizedZoom) < 0.001) return;
         var workArea = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea;
         (double Width, double Height) SizeAt(double zoom) => PlaybackMath.PipSize(videoRatio, Math.Min(420 * zoom, workArea.Width / scale * 0.8), Math.Min(420 * zoom, workArea.Height / scale * 0.8), zoom);
         var size = SizeAt(pipZoom);
+        if (pipDraggedWidth is double desiredWidth)
+        {
+            var width = Math.Min(desiredWidth, workArea.Width / scale * 0.9);
+            var height = width / videoRatio;
+            if (height > workArea.Height / scale * 0.9) { height = workArea.Height / scale * 0.9; width = height * videoRatio; }
+            size = (width, height);
+        }
         var larger = SizeAt(Math.Min(2, pipZoom + 0.25));
         PipSmallerButton.IsEnabled = pipZoom > 0.75;
         PipLargerButton.IsEnabled = pipZoom < 2 && (larger.Width - size.Width > 1 || larger.Height - size.Height > 1);
@@ -363,6 +373,7 @@ public sealed partial class MainWindow
     private void ChangePictureInPictureSize(double delta)
     {
         if (!isPictureInPicture) return;
+        pipDraggedWidth = null;
         pipZoom = Math.Clamp(pipZoom + delta, 0.75, 2);
         ResizePictureInPicture(); ShowPlayerControls();
     }
@@ -381,11 +392,23 @@ public sealed partial class MainWindow
             pipPreviousBounds = new Windows.Graphics.RectInt32(AppWindow.Position.X, AppWindow.Position.Y, AppWindow.Size.Width, AppWindow.Size.Height);
             try
             {
-                var compact = CompactOverlayPresenter.Create();
-                compact.InitialSize = CompactOverlaySize.Medium;
+                var compact = OverlappedPresenter.Create();
+                compact.IsAlwaysOnTop = true;
+                compact.IsResizable = true;
+                compact.IsMaximizable = false;
+                compact.IsMinimizable = true;
                 AppWindow.SetPresenter(compact);
+                pipWindowSizing ??= new PipWindowSizing(WinRT.Interop.WindowNative.GetWindowHandle(this),
+                    () => isPictureInPicture && !closed, () => videoRatio,
+                    () => { var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary).WorkArea; return (area.Width, area.Height); },
+                    width => { pipDraggedWidth = width; pipSizedRatio = videoRatio; pipSizedScale = Root.XamlRoot?.RasterizationScale ?? 1; pipSizedZoom = pipZoom; });
             }
-            catch (Exception) { pipPreviousPresenter = null; ShowMessage("Windows could not open picture in picture. Playback remains in this window.", true); return; }
+            catch (Exception)
+            {
+                if (pipPreviousPresenter is not null) Cleanup(() => AppWindow.SetPresenter(pipPreviousPresenter));
+                pipPreviousPresenter = null;
+                ShowMessage("Windows could not open picture in picture. Playback remains in this window.", true); return;
+            }
             VideoSurfaceSlot.Children.Remove(VideoSurface);
             FullscreenHost.Children.Add(VideoSurface);
             FullscreenHost.Visibility = Visibility.Visible;
@@ -410,8 +433,8 @@ public sealed partial class MainWindow
             SetTitleBar(AppTitleBar);
         }
         UpdateTitleBar();
-        PipMinimizeButton.Visibility = isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
-        PipSmallerButton.Visibility = PipLargerButton.Visibility = PipMinimizeButton.Visibility;
+        PipMinimizeButton.Visibility = Visibility.Collapsed; // Native resizable window supplies minimize and close.
+        PipSmallerButton.Visibility = PipLargerButton.Visibility = Visibility.Collapsed;
         VideoPresentationTitle.Visibility = isPictureInPicture ? Visibility.Collapsed : Visibility.Visible;
         PresentationReturnButton.Content = isPictureInPicture ? new FontIcon { Glyph = "\uE8A7", FontSize = 12 } : "Return to app";
         PresentationReturnButton.MinWidth = PresentationReturnButton.MinHeight = 0;
@@ -458,6 +481,7 @@ public sealed partial class MainWindow
     }
     private void DisposeUnifiedPlayer()
     {
+        Cleanup(() => pipWindowSizing?.Dispose());
         Cleanup(playerTimer.Stop); Cleanup(seekTimer.Stop);
         Cleanup(captionsClient.Dispose);
         Cleanup(() => adaptivePlayback?.Dispose());

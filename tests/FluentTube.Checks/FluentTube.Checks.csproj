@@ -4,6 +4,7 @@
   <ItemGroup><Compile Include="../../src/FluentTube/Captions.cs" Link="Captions.cs"/></ItemGroup>
   <ItemGroup><Compile Include="../../src/FluentTube/TakeoutImport.cs" Link="TakeoutImport.cs"/></ItemGroup>
   <ItemGroup><Compile Include="../../src/FluentTube/HelperProcessRunner.cs" Link="HelperProcessRunner.cs"/></ItemGroup>
+  <ItemGroup><Compile Include="../../src/FluentTube/PipResizeGeometry.cs" Link="PipResizeGeometry.cs"/></ItemGroup>
   <ItemGroup><Compile Include="../../src/FluentTube/LocalLibrary.cs" Link="LocalLibrary.cs"/><Compile Include="../../src/FluentTube/LibraryStore.cs" Link="LibraryStore.cs"/></ItemGroup>
   <ItemGroup><Compile Include="../../src/FluentTube/YouTubeService.cs" Link="YouTubeService.cs"/><Compile Include="../../src/FluentTube/Video.cs" Link="Video.cs"/><Compile Include="../../src/FluentTube/StreamCache.cs" Link="StreamCache.cs"/><Compile Include="../../src/FluentTube/PlaybackMath.cs" Link="PlaybackMath.cs"/></ItemGroup>
 </Project>
