@@ -10,15 +10,21 @@ jobs:
   build:
     runs-on: windows-2025
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v6.0.0
         with:
           dotnet-version: '10.0.x'
       - name: Check video URL handling
         run: dotnet run --project tests/FluentTube.Checks -c Release
       - name: Publish native Windows x64 app
         run: dotnet publish src/FluentTube/FluentTube.csproj -c Release -p:Platform=x64 -o artifacts/FluentTube-win-x64
-      - uses: actions/upload-artifact@v4
+      - name: Verify executable and XAML resources
+        shell: pwsh
+        run: |
+          foreach ($file in @('FluentTube.exe', 'FluentTube.pri')) {
+            if (!(Test-Path "artifacts/FluentTube-win-x64/$file")) { throw "Missing app output: $file" }
+          }
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: FluentTube-win-x64
           path: artifacts/FluentTube-win-x64/

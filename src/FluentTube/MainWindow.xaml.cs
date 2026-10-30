@@ -62,7 +62,14 @@ public sealed partial class MainWindow : Window
     {
         ShowPanel("browse");
         PageTitle.Text = query is null ? "Discover" : $"Results for “{query}”";
-        if (key.Length == 0) { ShowMessage("Add a YouTube Data API v3 key in Settings to search. You can open video links without a key."); return; }
+        if (key.Length == 0)
+        {
+            Videos.ItemsSource = null;
+            EmptyState.Text = "Paste a YouTube video link above to start watching. Add an API key in Settings for search and discovery.";
+            EmptyState.Visibility = Visibility.Visible;
+            ShowMessage("Add a YouTube Data API v3 key in Settings to search. You can open video links without a key.");
+            return;
+        }
         request?.Cancel();
         var active = request = new CancellationTokenSource();
         Search.IsEnabled = false;
