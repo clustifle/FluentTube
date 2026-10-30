@@ -545,6 +545,7 @@ public sealed partial class MainWindow : Window
         AppTitleBar.Padding = new Thickness(Math.Max(16, titleBar.LeftInset / scale), 0, titleBar.RightInset / scale, 0);
         FullscreenHeading.Padding = isPictureInPicture ? new Thickness(6, 2, 6, 2) : new Thickness(16);
         ResizePictureInPicture();
+        QueuePipButtonRegions();
         titleBar.ButtonForegroundColor = isPictureInPicture || Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
         titleBar.ButtonInactiveForegroundColor = isPictureInPicture || Root.ActualTheme == ElementTheme.Dark
             ? Windows.UI.Color.FromArgb(153, 255, 255, 255) : Windows.UI.Color.FromArgb(153, 0, 0, 0);

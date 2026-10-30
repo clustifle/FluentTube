@@ -24,6 +24,8 @@ public sealed partial class MainWindow
     private PipWindowSizing? pipWindowSizing;
     private double? pipDraggedWidth;
     private bool pipPreviousMaximized;
+    private Windows.Graphics.RectInt32[] pipButtonRegions = [];
+    private bool pipButtonRegionsQueued;
     [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "ShowWindow")]
     [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
     private static extern bool NativeShowWindow(IntPtr window, int command);
@@ -45,6 +47,8 @@ public sealed partial class MainWindow
 
     private void InitializeUnifiedPlayer()
     {
+        VideoSurface.SizeChanged += (_, _) => QueuePipButtonRegions();
+        FullscreenHeading.SizeChanged += (_, _) => QueuePipButtonRegions();
         media.PlaybackSession.NaturalVideoSizeChanged += (_, _) => DispatcherQueue.TryEnqueue(() => { if (!closed) UpdateNaturalVideoRatio(); });
         playerTimer.Tick += (_, _) => RefreshPlayerControls();
         playerTimer.Start();
@@ -249,11 +253,17 @@ public sealed partial class MainWindow
         FullscreenHeading.Visibility = isFullscreen || isPictureInPicture ? Visibility.Visible : Visibility.Collapsed;
         PlayerControls.IsHitTestVisible = visible;
         PipControls.IsHitTestVisible = visible;
-        FullscreenHeading.IsHitTestVisible = visible;
+        FullscreenHeading.IsHitTestVisible = isPictureInPicture || visible;
+        if (isPictureInPicture)
+        {
+            var heading = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(FullscreenHeading);
+            heading.StopAnimation("Opacity"); heading.Opacity = 1;
+        }
         if (controlsVisible == visible) return;
         controlsVisible = visible;
         foreach (var element in new UIElement[] { PlayerControls, PipControls, FullscreenHeading })
         {
+            if (isPictureInPicture && ReferenceEquals(element, FullscreenHeading)) continue;
             var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(element);
             if (!motionSettings.AnimationsEnabled) { visual.StopAnimation("Opacity"); visual.Opacity = visible ? 1 : 0; continue; }
             var fade = visual.Compositor.CreateScalarKeyFrameAnimation();
@@ -376,6 +386,30 @@ public sealed partial class MainWindow
         var scale = Root.XamlRoot?.RasterizationScale ?? 1;
         return new((int)Math.Floor(rect.Left * scale), (int)Math.Floor(rect.Top * scale), (int)Math.Ceiling(rect.Right * scale), (int)Math.Ceiling(rect.Bottom * scale));
     }
+    private void QueuePipButtonRegions()
+    {
+        if (closed || !isPictureInPicture || pipButtonRegionsQueued) return;
+        pipButtonRegionsQueued = true;
+        if (!DispatcherQueue.TryEnqueue(() => { pipButtonRegionsQueued = false; UpdatePipButtonRegions(); })) pipButtonRegionsQueued = false;
+    }
+    private void UpdatePipButtonRegions()
+    {
+        if (closed || !isPictureInPicture || Root.XamlRoot is null) return;
+        var scale = Root.XamlRoot.RasterizationScale;
+        var regions = new List<Windows.Graphics.RectInt32>();
+        foreach (var button in new FrameworkElement[] { PipMinimizeButton, PresentationReturnButton, PipCloseButton })
+        {
+            if (button.Visibility != Visibility.Visible || button.ActualWidth <= 0) continue;
+            var rect = button.TransformToVisual(Root).TransformBounds(new Windows.Foundation.Rect(0, 0, button.ActualWidth, button.ActualHeight));
+            var left = (int)Math.Floor(rect.Left * scale); var top = (int)Math.Floor(rect.Top * scale);
+            regions.Add(new(left, top, (int)Math.Ceiling(rect.Right * scale) - left, (int)Math.Ceiling(rect.Bottom * scale) - top));
+        }
+        var updated = regions.ToArray();
+        if (updated.SequenceEqual(pipButtonRegions)) return;
+        Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(AppWindow.Id)
+            .SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Passthrough, updated);
+        pipButtonRegions = updated;
+    }
     private void ResizePictureInPicture()
     {
         if (!isPictureInPicture || closed) return;
@@ -465,6 +499,9 @@ public sealed partial class MainWindow
         else
         {
             isPictureInPicture = false;
+            Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(AppWindow.Id)
+                .ClearRegionRects(Microsoft.UI.Input.NonClientRegionKind.Passthrough);
+            pipButtonRegions = [];
             if (pipPreviousPresenter is not null) AppWindow.SetPresenter(pipPreviousPresenter); else AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
             if (pipPreviousMaximized && AppWindow.Presenter is OverlappedPresenter restored) restored.Maximize();
             else AppWindow.MoveAndResize(pipPreviousBounds);
@@ -491,6 +528,7 @@ public sealed partial class MainWindow
         RefreshPlayerControls();
         ShowPlayerControls();
         Player.Focus(FocusState.Programmatic);
+        QueuePipButtonRegions();
     }
     private void ToggleFullscreen(object sender, RoutedEventArgs args) => SetFullscreen(!isFullscreen);
     private void SetFullscreen(bool value)
