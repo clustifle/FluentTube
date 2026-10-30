@@ -20,17 +20,10 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        SystemBackdrop = new MicaBackdrop { Kind = Microsoft.UI.Composition.SystemBackdrops.MicaKind.BaseAlt };
-        ExtendsContentIntoTitleBar = true;
-        SetTitleBar(TitleBar);
-        AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
-        AppWindow.TitleBar.ButtonInactiveBackgroundColor = Microsoft.UI.Colors.Transparent;
-        Root.ActualThemeChanged += (_, _) => UpdateCaptionTheme();
+        SystemBackdrop = new MicaBackdrop();
         Root.SizeChanged += (_, e) =>
         {
-            HeroArt.Visibility = e.NewSize.Width >= 1100 ? Visibility.Visible : Visibility.Collapsed;
-            ToolbarBadge.Visibility = e.NewSize.Width >= 1100 ? Visibility.Visible : Visibility.Collapsed;
-            ContentLayout.Padding = new Thickness(e.NewSize.Width < 800 ? 16 : 28, 8, e.NewSize.Width < 800 ? 16 : 28, 20);
+            ContentLayout.Padding = new Thickness(e.NewSize.Width < 800 ? 16 : 24, 16, e.NewSize.Width < 800 ? 16 : 24, 16);
         };
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 840));
         Player.SetMediaPlayer(media);
@@ -55,7 +48,7 @@ public sealed partial class MainWindow : Window
         PopulateSettings();
         ready = true;
         ApplyPreferences();
-        ShowMessage("Search YouTube, paste a video link, or import a local video. No account needed.");
+        ShowMessage("Ready");
         var link = Environment.GetCommandLineArgs().Skip(1).FirstOrDefault();
         var id = link is null ? null : YouTubeService.ParseVideoId(link);
         if (id is not null) await Play(new Video(id, "YouTube video", "YouTube"));
@@ -68,7 +61,9 @@ public sealed partial class MainWindow : Window
         Status.Title = error ? "Something needs attention" : "FluentTube";
         Status.Message = message;
         Status.Severity = error ? InfoBarSeverity.Warning : InfoBarSeverity.Informational;
-        Status.IsOpen = true;
+        Status.IsOpen = error;
+        StatusText.Text = message;
+        StatusText.Visibility = error ? Visibility.Collapsed : Visibility.Visible;
     }
     private void ShowPanel(string panel)
     {
@@ -87,8 +82,6 @@ public sealed partial class MainWindow : Window
         ShowPanel("browse");
         if (tag == "saved")
         {
-            WelcomePanel.Visibility = Visibility.Collapsed;
-            TopicsPanel.Visibility = Visibility.Collapsed;
             PageTitle.Text = "Watch later";
             Videos.ItemsSource = saved.ToList();
             EmptyState.Text = "Your saved videos will appear here. Open a video and choose Save for later.";
@@ -103,17 +96,15 @@ public sealed partial class MainWindow : Window
         Navigation.SelectedItem = Navigation.MenuItems[0];
         syncingNavigation = false;
         ShowPanel("browse");
-        PageTitle.Text = query is null ? "Discover" : $"Results for “{query}”";
-        WelcomePanel.Visibility = string.IsNullOrWhiteSpace(query) ? Visibility.Visible : Visibility.Collapsed;
-        TopicsPanel.Visibility = string.IsNullOrWhiteSpace(query) ? Visibility.Visible : Visibility.Collapsed;
+        PageTitle.Text = query is null ? "Home" : $"Results for “{query}”";
         request?.Cancel();
         if (string.IsNullOrWhiteSpace(query))
         {
             Videos.ItemsSource = null;
-            EmptyState.Text = "Search for a topic, creator, or song above. You can also paste a YouTube link or choose Import video.";
+            EmptyState.Text = "Search for a video above, or choose Open file to play a video from your device.";
             EmptyState.Visibility = Visibility.Visible;
             EmptyCard.Visibility = Visibility.Visible;
-            ShowMessage("Search is ready. No API key or billing setup needed.");
+            ShowMessage("Ready");
             return;
         }
         var active = request = new CancellationTokenSource();
@@ -153,13 +144,6 @@ public sealed partial class MainWindow : Window
         else await LoadVideos(query);
     }
     private async void VideoClicked(object sender, ItemClickEventArgs args) => await Play((Video)args.ClickedItem);
-    private async void ExploreTopic(object sender, RoutedEventArgs args)
-    {
-        var topic = (sender as Button)?.Tag as string;
-        if (topic is null) return;
-        Search.Text = topic;
-        await LoadVideos(topic);
-    }
     private void SetSource(MediaSource next)
     {
         media.Pause();
@@ -263,9 +247,6 @@ public sealed partial class MainWindow : Window
         };
         Root.Resources["SystemAccentColor"] = color;
         Root.Resources["AccentFillColorDefaultBrush"] = new SolidColorBrush(color);
-        ((SolidColorBrush)Root.Resources["BrandBrush"]).Color = color;
-        Search.BorderBrush = new SolidColorBrush(color);
-        UpdateCaptionTheme();
         media.Volume = preferences.Volume;
         media.IsLoopingEnabled = preferences.Loop;
         media.PlaybackSession.PlaybackRate = preferences.Speed;
@@ -303,10 +284,5 @@ public sealed partial class MainWindow : Window
             if (card.Child is StackPanel stack && stack.Children[0] is Grid thumbnail) thumbnail.Height = card.Width * 9 / 16;
         }
         for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++) ResizeCards(VisualTreeHelper.GetChild(node, i));
-    }
-    private void UpdateCaptionTheme()
-    {
-        AppWindow.TitleBar.ButtonForegroundColor = Root.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black;
-        AppWindow.TitleBar.ButtonInactiveForegroundColor = Microsoft.UI.Colors.Gray;
     }
 }

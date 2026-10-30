@@ -1,152 +1,90 @@
 <Window x:Class="FluentTube.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="using:FluentTube" Title="FluentTube">
   <Grid x:Name="Root" Background="Transparent">
-    <Grid.Resources>
-      <SolidColorBrush x:Key="BrandBrush" Color="#0078D4"/>
-      <Style x:Key="SectionCaption" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="11"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="CharacterSpacing" Value="100"/><Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}"/>
-      </Style>
-      <Style x:Key="SettingsCard" TargetType="Border">
-        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}"/><Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="12"/><Setter Property="Padding" Value="24"/>
-      </Style>
-      <Style x:Key="TopicButton" TargetType="Button">
-        <Setter Property="CornerRadius" Value="20"/><Setter Property="Padding" Value="18,9"/><Setter Property="Margin" Value="0,0,8,8"/>
-      </Style>
-    </Grid.Resources>
-    <Grid.RowDefinitions><RowDefinition Height="48"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-
-    <Grid x:Name="TitleBar" Background="Transparent" Margin="20,0,140,0">
-      <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-        <Border Background="{StaticResource BrandBrush}" CornerRadius="6" Width="23" Height="23"><SymbolIcon Symbol="Play" Foreground="White" RenderTransformOrigin="0.5,0.5"><SymbolIcon.RenderTransform><ScaleTransform ScaleX="0.55" ScaleY="0.55"/></SymbolIcon.RenderTransform></SymbolIcon></Border>
-        <TextBlock Text="FluentTube" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
-        <TextBlock Text="/" Foreground="{ThemeResource TextFillColorTertiaryBrush}" VerticalAlignment="Center"/>
-        <TextBlock Text="Your space to watch" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center"/>
-      </StackPanel>
-    </Grid>
-
-    <NavigationView x:Name="Navigation" Grid.Row="1" PaneDisplayMode="Auto" OpenPaneLength="240" CompactPaneLength="64" IsBackButtonVisible="Collapsed" IsTitleBarAutoPaddingEnabled="False" IsPaneToggleButtonVisible="True" IsSettingsVisible="True" AlwaysShowHeader="False" SelectionChanged="Navigate" ItemInvoked="NavigationInvoked" Background="Transparent">
-      <NavigationView.PaneHeader>
-        <StackPanel Margin="24,12,16,24" Spacing="18">
-          <StackPanel Orientation="Horizontal" Spacing="10"><TextBlock Text="Fluent" FontSize="25" FontWeight="SemiBold"/><TextBlock Text="Tube" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource BrandBrush}" Margin="-9,0,0,0"/></StackPanel>
-          <TextBlock Text="YOUR SPACE" Style="{StaticResource SectionCaption}"/>
-        </StackPanel>
-      </NavigationView.PaneHeader>
+    <NavigationView x:Name="Navigation" PaneDisplayMode="Auto" OpenPaneLength="240" CompactPaneLength="48" IsBackButtonVisible="Collapsed" AlwaysShowHeader="False" SelectionChanged="Navigate" ItemInvoked="NavigationInvoked" Background="Transparent">
       <NavigationView.MenuItems>
-        <NavigationViewItem Content="Discover" Tag="home" Icon="Home" IsSelected="True" ToolTipService.ToolTip="Discover something to watch"/>
-        <NavigationViewItem Content="Watch later" Tag="saved" Icon="Save" ToolTipService.ToolTip="Your saved videos"/>
+        <NavigationViewItem Content="Home" Tag="home" Icon="Home" IsSelected="True"/>
+        <NavigationViewItem Content="Watch later" Tag="saved" Icon="Save"/>
         <NavigationViewItemSeparator/>
-        <NavigationViewItem Content="Import a video" Tag="import" Icon="OpenFile" SelectsOnInvoked="False" ToolTipService.ToolTip="Open a video from your device"/>
+        <NavigationViewItem Content="Open file" Tag="import" Icon="OpenFile" SelectsOnInvoked="False"/>
       </NavigationView.MenuItems>
-      <NavigationView.PaneFooter>
-        <StackPanel Margin="24,16,12,20" Spacing="6">
-          <TextBlock Text="MADE FOR WINDOWS" Style="{StaticResource SectionCaption}" FontSize="9"/>
-          <TextBlock Text="FluentTube 0.4" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-        </StackPanel>
-      </NavigationView.PaneFooter>
-
-      <Grid x:Name="ContentLayout" Padding="28,8,28,20" RowSpacing="18">
+      <Grid x:Name="ContentLayout" Padding="24,16,24,16" RowSpacing="16">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <Grid ColumnSpacing="16">
-          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-          <AutoSuggestBox x:Name="Search" PlaceholderText="Search videos, creators, or paste a link" QueryIcon="Find" QuerySubmitted="SearchSubmitted" AutomationProperties.Name="Search YouTube" CornerRadius="10" MinHeight="42" VerticalAlignment="Center"/>
-          <Border x:Name="ToolbarBadge" Grid.Column="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="20" Padding="12,7" VerticalAlignment="Center">
-            <StackPanel Orientation="Horizontal" Spacing="7"><Ellipse Width="6" Height="6" Fill="{StaticResource BrandBrush}"/><TextBlock Text="No account needed" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
-          </Border>
-          <Button Grid.Column="2" Click="ImportVideo" CornerRadius="10" Padding="14,10" VerticalAlignment="Center" AutomationProperties.Name="Import a local video"><StackPanel Orientation="Horizontal" Spacing="8"><SymbolIcon Symbol="OpenFile"/><TextBlock Text="Import"/></StackPanel></Button>
+        <Grid ColumnSpacing="12">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <AutoSuggestBox x:Name="Search" PlaceholderText="Search YouTube or paste a video link" QueryIcon="Find" QuerySubmitted="SearchSubmitted" AutomationProperties.Name="Search YouTube"/>
+          <Button Grid.Column="1" Content="Open file" Click="ImportVideo"/>
         </Grid>
-
-        <Grid Grid.Row="1">
-          <ScrollViewer x:Name="BrowsePanel" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="24" Padding="0,4,8,12">
-              <StackPanel Spacing="6"><TextBlock Text="WATCH YOUR WAY" Style="{StaticResource SectionCaption}"/><TextBlock x:Name="PageTitle" Text="Discover" FontSize="32" FontWeight="SemiBold" TextWrapping="Wrap"/></StackPanel>
-              <Border x:Name="WelcomePanel" CornerRadius="20" Padding="32" MinHeight="260">
-                <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#163C77" Offset="0"/><GradientStop Color="#275D9F" Offset="0.55"/><GradientStop Color="#366B90" Offset="1"/></LinearGradientBrush></Border.Background>
-                <Grid ColumnSpacing="24">
-                  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                  <StackPanel Spacing="16" VerticalAlignment="Center">
-                    <TextBlock Text="A LITTLE CURIOSITY. A LOT TO DISCOVER." FontSize="10" FontWeight="SemiBold" CharacterSpacing="90" Foreground="#BFD8F9" TextWrapping="Wrap"/>
-                    <TextBlock Text="Your next favorite&#x0a;starts here." FontSize="38" FontWeight="SemiBold" Foreground="White" TextWrapping="Wrap"/>
-                    <TextBlock Text="Find something worth watching. Or bring a video of your own." FontSize="14" Foreground="#D3E3F8" TextWrapping="Wrap" MaxWidth="450" HorizontalAlignment="Left"/>
-                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,4,0,0">
-                      <Button Content="Explore technology" Tag="Technology" Click="ExploreTopic" Background="White" Foreground="#163C77" CornerRadius="8" Padding="16,10"/>
-                      <Button Content="Open a video" Click="ImportVideo" Background="#284D78" Foreground="White" BorderBrush="#7094BA" CornerRadius="8" Padding="16,10"/>
-                    </StackPanel>
-                  </StackPanel>
-                  <Grid x:Name="HeroArt" Grid.Column="1" Width="200" Height="200" VerticalAlignment="Center" IsHitTestVisible="False">
-                    <Ellipse Fill="#155C9F" Opacity="0.7" Width="200" Height="200"/>
-                    <Ellipse Stroke="#699DCD" StrokeThickness="1" Width="180" Height="180"/>
-                    <Border Background="#3B7EB6" BorderBrush="#83B1DC" BorderThickness="1" CornerRadius="24" Width="112" Height="112" Rotation="-8"><SymbolIcon Symbol="Play" Foreground="White" RenderTransformOrigin="0.5,0.5"><SymbolIcon.RenderTransform><ScaleTransform ScaleX="2" ScaleY="2"/></SymbolIcon.RenderTransform></SymbolIcon></Border>
-                    <Border Background="#19466E" CornerRadius="12" Width="42" Height="42" HorizontalAlignment="Right" VerticalAlignment="Top"><SymbolIcon Symbol="MusicInfo" Foreground="#C8E4FF"/></Border>
-                  </Grid>
-                </Grid>
-              </Border>
-              <StackPanel x:Name="TopicsPanel" Spacing="12">
-                <TextBlock Text="FOLLOW YOUR CURIOSITY" Style="{StaticResource SectionCaption}"/>
-                <ItemsControl><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapGrid Orientation="Horizontal" MaximumRowsOrColumns="8"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                  <Button Content="Technology" Tag="Technology" Click="ExploreTopic" Style="{StaticResource TopicButton}"/>
-                  <Button Content="Music" Tag="Music" Click="ExploreTopic" Style="{StaticResource TopicButton}"/>
-                  <Button Content="Gaming" Tag="Gaming" Click="ExploreTopic" Style="{StaticResource TopicButton}"/>
-                  <Button Content="Design" Tag="Design" Click="ExploreTopic" Style="{StaticResource TopicButton}"/>
-                  <Button Content="Science" Tag="Science" Click="ExploreTopic" Style="{StaticResource TopicButton}"/>
-                  <Button Content="Travel" Tag="Travel" Click="ExploreTopic" Style="{StaticResource TopicButton}"/>
-                </ItemsControl>
+        <Border Grid.Row="1" Background="{ThemeResource LayerFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
+          <Grid Padding="24">
+            <ScrollViewer x:Name="BrowsePanel" HorizontalScrollBarVisibility="Disabled">
+              <StackPanel Spacing="20">
+                <TextBlock x:Name="PageTitle" Text="Home" Style="{StaticResource TitleTextBlockStyle}" TextWrapping="Wrap"/>
+                <Border x:Name="EmptyCard" Padding="0,8">
+                  <TextBlock x:Name="EmptyState" Text="Search for a video above, or choose Open file to play a video from your device." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="560" HorizontalAlignment="Left"/>
+                </Border>
+                <GridView x:Name="Videos" IsItemClickEnabled="True" ItemClick="VideoClicked" SelectionMode="None">
+                  <GridView.ItemTemplate><DataTemplate x:DataType="local:Video">
+                    <Border x:Name="VideoCard" Loaded="VideoCardLoaded" Width="290" Margin="0,0,12,16">
+                      <StackPanel Spacing="10">
+                        <Grid Height="163" Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="4">
+                          <SymbolIcon Symbol="Video" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                          <Image Source="{x:Bind Thumbnail}" Stretch="UniformToFill"/>
+                        </Grid>
+                        <StackPanel Spacing="4" Padding="2,0,2,8">
+                          <TextBlock Text="{x:Bind Title}" TextWrapping="Wrap" MaxLines="2" FontWeight="SemiBold"/>
+                          <TextBlock Text="{x:Bind Channel}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate></GridView.ItemTemplate>
+                </GridView>
               </StackPanel>
-              <Border x:Name="EmptyCard" Style="{StaticResource SettingsCard}">
-                <StackPanel Orientation="Horizontal" Spacing="16"><SymbolIcon Symbol="Video" Foreground="{StaticResource BrandBrush}" VerticalAlignment="Top"/><TextBlock x:Name="EmptyState" Text="Start with a search or open a local video. Everything plays in a native Windows player." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" MaxWidth="560" VerticalAlignment="Center"/></StackPanel>
-              </Border>
-              <GridView x:Name="Videos" IsItemClickEnabled="True" ItemClick="VideoClicked" SelectionMode="None" HorizontalAlignment="Stretch">
-                <GridView.ItemTemplate><DataTemplate x:DataType="local:Video">
-                  <Border x:Name="VideoCard" Loaded="VideoCardLoaded" Width="290" Margin="0,0,12,18" CornerRadius="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                    <StackPanel>
-                      <Grid Height="163" x:Name="ThumbnailFrame" Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="13,13,0,0">
-                        <SymbolIcon Symbol="Video" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
-                        <Image Source="{x:Bind Thumbnail}" Stretch="UniformToFill"/>
-                      </Grid>
-                      <StackPanel Margin="16,14,16,18" Spacing="8"><TextBlock Text="{x:Bind Title}" TextWrapping="Wrap" MaxLines="2" FontWeight="SemiBold" FontSize="14"/><TextBlock Text="{x:Bind Channel}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" TextTrimming="CharacterEllipsis"/></StackPanel>
-                    </StackPanel>
-                  </Border>
-                </DataTemplate></GridView.ItemTemplate>
-              </GridView>
-            </StackPanel>
-          </ScrollViewer>
-
-          <Grid x:Name="PlayerPanel" Visibility="Collapsed" RowSpacing="18">
-            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Spacing="6"><TextBlock Text="NOW PLAYING" Style="{StaticResource SectionCaption}"/><TextBlock Text="Sit back. Press play." FontSize="26" FontWeight="SemiBold"/></StackPanel><Button Grid.Column="1" Content="Back to videos" Click="BackToVideos" VerticalAlignment="Center" CornerRadius="8"/></Grid>
-            <Border Grid.Row="1" Background="Black" CornerRadius="16" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1"><MediaPlayerElement x:Name="Player" MinHeight="180" AreTransportControlsEnabled="True" AutoPlay="False"/></Border>
-            <Border Grid.Row="2" Style="{StaticResource SettingsCard}"><StackPanel Spacing="16"><TextBlock x:Name="VideoTitle" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" MaxLines="2"/><StackPanel Orientation="Horizontal" Spacing="10"><Button Content="Save for later" Click="SaveVideo" Style="{StaticResource AccentButtonStyle}" CornerRadius="8"/><Button Content="Open on YouTube" Click="OpenInBrowser" CornerRadius="8"/><Button Content="Import video" Click="ImportVideo" CornerRadius="8"/></StackPanel></StackPanel></Border>
+            </ScrollViewer>
+            <Grid x:Name="PlayerPanel" Visibility="Collapsed" RowSpacing="16">
+              <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+              <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Button Click="BackToVideos" AutomationProperties.Name="Back to videos" ToolTipService.ToolTip="Back"><SymbolIcon Symbol="Back"/></Button>
+                <TextBlock x:Name="VideoTitle" Grid.Column="1" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" MaxLines="2" VerticalAlignment="Center"/>
+              </Grid>
+              <Border Grid.Row="1" Background="Black"><MediaPlayerElement x:Name="Player" MinHeight="180" AreTransportControlsEnabled="True" AutoPlay="False"/></Border>
+              <CommandBar Grid.Row="2" Background="Transparent" DefaultLabelPosition="Right" HorizontalAlignment="Left" IsOpen="False">
+                <AppBarButton Icon="Save" Label="Save for later" Click="SaveVideo"/>
+                <AppBarButton Icon="OpenFile" Label="Open file" Click="ImportVideo"/>
+                <AppBarButton Icon="Go" Label="Open on YouTube" Click="OpenInBrowser"/>
+              </CommandBar>
+            </Grid>
+            <ScrollViewer x:Name="SettingsPanel" Visibility="Collapsed" HorizontalScrollBarVisibility="Disabled">
+              <StackPanel Spacing="16" MaxWidth="800" HorizontalAlignment="Left">
+                <TextBlock Text="Settings" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,8"/>
+                <Expander Header="Appearance" IsExpanded="True" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                  <StackPanel Spacing="20">
+                    <ComboBox x:Name="ThemeChoice" Header="Theme" SelectedIndex="0" SelectionChanged="SettingsChanged" MinWidth="220"><x:String>System</x:String><x:String>Light</x:String><x:String>Dark</x:String></ComboBox>
+                    <ComboBox x:Name="AccentChoice" Header="Accent color" SelectedIndex="0" SelectionChanged="SettingsChanged" MinWidth="220"><x:String>Blue</x:String><x:String>Purple</x:String><x:String>Green</x:String><x:String>Orange</x:String><x:String>Rose</x:String></ComboBox>
+                    <ToggleSwitch x:Name="CompactChoice" Header="Compact video thumbnails" Toggled="SettingsChanged"/>
+                  </StackPanel>
+                </Expander>
+                <Expander Header="Playback" IsExpanded="True" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                  <StackPanel Spacing="20">
+                    <ToggleSwitch x:Name="AutoplayChoice" Header="Play automatically when a video opens" IsOn="True" Toggled="SettingsChanged"/>
+                    <ToggleSwitch x:Name="LoopChoice" Header="Repeat current video" Toggled="SettingsChanged"/>
+                    <Slider x:Name="VolumeChoice" Header="Default volume" Minimum="0" Maximum="100" Value="80" StepFrequency="5" ValueChanged="SettingsChanged" MinWidth="260"/>
+                    <ComboBox x:Name="SpeedChoice" Header="Playback speed" SelectedIndex="2" SelectionChanged="SettingsChanged" MinWidth="220"><x:String>0.5×</x:String><x:String>0.75×</x:String><x:String>1×</x:String><x:String>1.25×</x:String><x:String>1.5×</x:String><x:String>2×</x:String></ComboBox>
+                  </StackPanel>
+                </Expander>
+                <Expander Header="Startup" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"><ToggleSwitch x:Name="StartupChoice" Header="Open Watch later at startup" Toggled="SettingsChanged"/></Expander>
+                <Expander Header="About FluentTube" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                  <StackPanel Spacing="12"><TextBlock Text="FluentTube 0.5" FontWeight="SemiBold"/><TextBlock Text="WinUI 3 and .NET 10"/><TextBlock Text="Search and public video playback use yt-dlp. No API key is required. Video availability and supported codecs depend on YouTube and Windows." TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel>
+                </Expander>
+                <Button Content="Reset preferences" Click="ResetSettings" Margin="0,8,0,0"/>
+              </StackPanel>
+            </ScrollViewer>
           </Grid>
-
-          <ScrollViewer x:Name="SettingsPanel" Visibility="Collapsed" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Spacing="22" MaxWidth="1000" HorizontalAlignment="Stretch" Padding="0,4,8,24">
-              <StackPanel Spacing="6"><TextBlock Text="MAKE IT YOURS" Style="{StaticResource SectionCaption}"/><TextBlock Text="Settings" FontSize="32" FontWeight="SemiBold"/><TextBlock Text="A familiar space, with your own finishing touches." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/></StackPanel>
-              <Border Style="{StaticResource SettingsCard}"><StackPanel Spacing="20">
-                <StackPanel Orientation="Horizontal" Spacing="12"><SymbolIcon Symbol="Highlight" Foreground="{StaticResource BrandBrush}"/><TextBlock Text="Appearance" FontSize="20" FontWeight="SemiBold"/></StackPanel>
-                <Grid ColumnSpacing="20"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                  <ComboBox x:Name="ThemeChoice" Header="App theme" SelectedIndex="0" SelectionChanged="SettingsChanged" HorizontalAlignment="Stretch"><x:String>System</x:String><x:String>Light</x:String><x:String>Dark</x:String></ComboBox>
-                  <ComboBox x:Name="AccentChoice" Grid.Column="1" Header="Accent color" SelectedIndex="0" SelectionChanged="SettingsChanged" HorizontalAlignment="Stretch"><x:String>Blue</x:String><x:String>Purple</x:String><x:String>Green</x:String><x:String>Orange</x:String><x:String>Rose</x:String></ComboBox>
-                </Grid>
-                <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}"/>
-                <Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Spacing="4"><TextBlock Text="Compact video cards" FontWeight="SemiBold"/><TextBlock Text="Fit more discoveries into your window." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/></StackPanel><ToggleSwitch x:Name="CompactChoice" Grid.Column="1" Toggled="SettingsChanged" AutomationProperties.Name="Compact video cards" VerticalAlignment="Center"/></Grid>
-                <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="8" Padding="12"><TextBlock Text="Mica follows your Windows background and theme. Windows may use a solid fallback when transparency is unavailable." FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/></Border>
-              </StackPanel></Border>
-              <Border Style="{StaticResource SettingsCard}"><StackPanel Spacing="20">
-                <StackPanel Orientation="Horizontal" Spacing="12"><SymbolIcon Symbol="Play" Foreground="{StaticResource BrandBrush}"/><TextBlock Text="Playback" FontSize="20" FontWeight="SemiBold"/></StackPanel>
-                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Spacing="4"><TextBlock Text="Start playing automatically" FontWeight="SemiBold"/><TextBlock Text="Play when you open a video." Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel><ToggleSwitch x:Name="AutoplayChoice" Grid.Column="1" IsOn="True" Toggled="SettingsChanged" AutomationProperties.Name="Autoplay"/></Grid>
-                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Spacing="4"><TextBlock Text="Keep it on repeat" FontWeight="SemiBold"/><TextBlock Text="Loop the current video when it ends." Foreground="{ThemeResource TextFillColorSecondaryBrush}"/></StackPanel><ToggleSwitch x:Name="LoopChoice" Grid.Column="1" Toggled="SettingsChanged" AutomationProperties.Name="Repeat video"/></Grid>
-                <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}"/>
-                <Slider x:Name="VolumeChoice" Header="Default volume" Minimum="0" Maximum="100" Value="80" StepFrequency="5" ValueChanged="SettingsChanged"/>
-                <ComboBox x:Name="SpeedChoice" Header="Playback speed" SelectedIndex="2" SelectionChanged="SettingsChanged" HorizontalAlignment="Stretch"><x:String>0.5×</x:String><x:String>0.75×</x:String><x:String>1×</x:String><x:String>1.25×</x:String><x:String>1.5×</x:String><x:String>2×</x:String></ComboBox>
-              </StackPanel></Border>
-              <Border Style="{StaticResource SettingsCard}"><StackPanel Spacing="20">
-                <StackPanel Orientation="Horizontal" Spacing="12"><SymbolIcon Symbol="Home" Foreground="{StaticResource BrandBrush}"/><TextBlock Text="Your library" FontSize="20" FontWeight="SemiBold"/></StackPanel>
-                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Spacing="4"><TextBlock Text="Pick up where you saved" FontWeight="SemiBold"/><TextBlock Text="Open Watch later when FluentTube starts." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/></StackPanel><ToggleSwitch x:Name="StartupChoice" Grid.Column="1" Toggled="SettingsChanged" AutomationProperties.Name="Start with Watch later"/></Grid>
-                <Button Content="Import a local video" Click="ImportVideo" CornerRadius="8" HorizontalAlignment="Left"/>
-              </StackPanel></Border>
-              <Border Style="{StaticResource SettingsCard}"><StackPanel Spacing="12"><TextBlock Text="A native Windows experience" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="FluentTube 0.4 · WinUI 3 · .NET 10" Foreground="{ThemeResource TextFillColorSecondaryBrush}"/><TextBlock Text="No API key or billing setup. Search and public video playback use yt-dlp. Local files stay on your device. Some YouTube videos and Windows codecs may be unavailable." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap"/><TextBlock Text="Preferences save automatically for this Windows account." FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/><Button Content="Reset preferences" Click="ResetSettings" CornerRadius="8" HorizontalAlignment="Left"/></StackPanel></Border>
-            </StackPanel>
-          </ScrollViewer>
-        </Grid>
-        <InfoBar x:Name="Status" Grid.Row="2" IsOpen="True" IsClosable="True" Severity="Informational" Title="FluentTube" Message="Your space to watch. Search or import a video to begin." CornerRadius="10"/>
+        </Border>
+        <StackPanel Grid.Row="2" Spacing="8">
+          <InfoBar x:Name="Status" IsOpen="False" IsClosable="True" Severity="Warning"/>
+          <TextBlock x:Name="StatusText" Text="Ready" Foreground="{ThemeResource TextFillColorSecondaryBrush}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+        </StackPanel>
       </Grid>
     </NavigationView>
   </Grid>

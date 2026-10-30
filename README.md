@@ -1,6 +1,6 @@
 # FluentTube
 
-A Windows 11 YouTube client built with **C#, .NET 10, and WinUI 3**. Version 0.4 introduces a complete interface redesign: a Mica Alt shell, custom draggable title bar, adaptive sidebar, Discover hero and topic shortcuts, refined video cards, a dedicated native player workspace, and grouped Settings. Native Windows playback, key-free search, local imports, and saved preferences are preserved. This is an early app, not a finished YouTube replacement.
+A Windows 11 YouTube client built with **C#, .NET 10, and WinUI 3**. Version 0.5 uses a conventional Fluent layout: the standard Windows title bar, Mica backdrop, NavigationView, search box, video grid, native media controls, and Settings expanders. Native playback, key-free search, local imports, and saved preferences are preserved. This is an early app, not a finished YouTube replacement.
 
 ## Download
 
